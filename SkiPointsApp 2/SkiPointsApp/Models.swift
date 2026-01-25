@@ -30,7 +30,87 @@ struct Athlete: Identifiable, Codable, Hashable, Sendable {
     func points(for discipline: Discipline) -> Double {
         fisPoints[discipline] ?? 999.99
     }
-    
+
+    /// Short name format: "M. Odermatt"
+    var shortName: String {
+        guard let firstInitial = firstName.first else {
+            return lastName
+        }
+        return "\(firstInitial). \(lastName)"
+    }
+
+    /// Flag emoji for the athlete's nation
+    var flagEmoji: String {
+        Self.flagEmoji(for: nation)
+    }
+
+    /// Current best FIS points across all disciplines
+    var currentFISPoints: Double? {
+        let validPoints = fisPoints.values.filter { $0 < 990 }
+        return validPoints.min()
+    }
+
+    /// Ski brand (placeholder - would need to be fetched from athlete bio)
+    var skiBrand: String? {
+        // This would typically be fetched from athlete biography
+        // Returning nil as placeholder
+        nil
+    }
+
+    /// Convert nation code to flag emoji
+    static func flagEmoji(for nationCode: String) -> String {
+        let flagMap: [String: String] = [
+            "SUI": "🇨🇭",
+            "USA": "🇺🇸",
+            "AUT": "🇦🇹",
+            "NOR": "🇳🇴",
+            "FRA": "🇫🇷",
+            "ITA": "🇮🇹",
+            "GER": "🇩🇪",
+            "CAN": "🇨🇦",
+            "SWE": "🇸🇪",
+            "SLO": "🇸🇮",
+            "CRO": "🇭🇷",
+            "SVK": "🇸🇰",
+            "CZE": "🇨🇿",
+            "JPN": "🇯🇵",
+            "GBR": "🇬🇧",
+            "POL": "🇵🇱",
+            "FIN": "🇫🇮",
+            "BEL": "🇧🇪",
+            "NED": "🇳🇱",
+            "ESP": "🇪🇸",
+            "AUS": "🇦🇺",
+            "NZL": "🇳🇿",
+            "CHN": "🇨🇳",
+            "KOR": "🇰🇷",
+            "RUS": "🇷🇺",
+            "AND": "🇦🇩",
+            "LIE": "🇱🇮",
+            "GRE": "🇬🇷",
+            "BRA": "🇧🇷",
+            "ARG": "🇦🇷",
+            "CHI": "🇨🇱",
+            "MEX": "🇲🇽",
+            "BUL": "🇧🇬",
+            "ROU": "🇷🇴",
+            "UKR": "🇺🇦",
+            "BIH": "🇧🇦",
+            "SRB": "🇷🇸",
+            "MNE": "🇲🇪",
+            "MKD": "🇲🇰",
+            "ALB": "🇦🇱",
+            "TUR": "🇹🇷",
+            "ISR": "🇮🇱",
+            "IND": "🇮🇳",
+            "PAK": "🇵🇰",
+            "IRI": "🇮🇷",
+            "KAZ": "🇰🇿",
+            "MON": "🇲🇨"
+        ]
+        return flagMap[nationCode.uppercased()] ?? "🏳️"
+    }
+
     // Convenience initializer without FIS points
     init(fisCode: String, firstName: String, lastName: String, nation: String, yearOfBirth: Int, gender: Gender, fisPoints: [Discipline: Double] = [:]) {
         self.fisCode = fisCode
@@ -122,7 +202,29 @@ struct Race: Identifiable, Codable, Hashable, Sendable {
     var isFinished: Bool {
         status == .finished || status == .official
     }
-    
+
+    /// Title combining discipline and gender: "Men's Giant Slalom"
+    var title: String {
+        "\(gender.displayName)'s \(discipline.displayName)"
+    }
+
+    /// Full location with nation: "Adelboden, SUI"
+    var fullLocation: String {
+        "\(location), \(nation)"
+    }
+
+    /// Top 3 results (podium finishers)
+    var podium: [RaceResult] {
+        results
+            .filter { $0.status == .finished && $0.rank <= 3 }
+            .sorted { $0.rank < $1.rank }
+    }
+
+    /// The race winner (first place finisher)
+    var winner: RaceResult? {
+        results.first { $0.status == .finished && $0.rank == 1 }
+    }
+
     // Calculate penalty for this race (sum of best 5 FIS points)
     var calculatedPenalty: Double {
         // Filter to finished results with valid FIS points
@@ -192,6 +294,50 @@ struct RaceResult: Identifiable, Codable, Hashable, Sendable {
     var formattedFISPoints: String {
         String(format: "%.2f", fisPoints)
     }
+
+    /// Whether this result is a podium finish (rank 1-3)
+    var isPodium: Bool {
+        status == .finished && rank >= 1 && rank <= 3
+    }
+
+    /// Medal for podium finishers
+    var medal: Medal? {
+        guard status == .finished else { return nil }
+        switch rank {
+        case 1: return .gold
+        case 2: return .silver
+        case 3: return .bronze
+        default: return nil
+        }
+    }
+
+    /// Formatted time difference with + prefix (alias for formattedDifference)
+    var formattedDiff: String {
+        formattedDifference
+    }
+
+    /// Medal types for podium finishers
+    enum Medal: String, CaseIterable, Sendable {
+        case gold
+        case silver
+        case bronze
+
+        var emoji: String {
+            switch self {
+            case .gold: return "🥇"
+            case .silver: return "🥈"
+            case .bronze: return "🥉"
+            }
+        }
+
+        var color: String {
+            switch self {
+            case .gold: return "yellow"
+            case .silver: return "gray"
+            case .bronze: return "orange"
+            }
+        }
+    }
 }
 
 // MARK: - Enums
@@ -237,7 +383,19 @@ enum Discipline: String, Codable, CaseIterable, Hashable, Sendable {
     var shortName: String {
         rawValue
     }
-    
+
+    /// SF Symbol icon name for the discipline
+    var iconName: String {
+        switch self {
+        case .downhill: return "arrow.down.circle.fill"
+        case .superG: return "bolt.circle.fill"
+        case .giantSlalom: return "chevron.down.circle.fill"
+        case .slalom: return "arrow.left.arrow.right.circle.fill"
+        case .combined: return "plus.circle.fill"
+        case .parallelSlalom: return "arrow.left.and.right.circle.fill"
+        }
+    }
+
     var fFactor: Double {
         switch self {
         case .downhill: return 1330.0
@@ -309,7 +467,24 @@ enum RaceStatus: String, Codable, CaseIterable, Hashable, Sendable {
         case .postponed: return "Postponed"
         }
     }
-    
+
+    /// Short abbreviated name for the status
+    var shortName: String {
+        switch self {
+        case .scheduled: return "SCH"
+        case .inProgress: return "LIVE"
+        case .finished: return "FIN"
+        case .official: return "OFF"
+        case .cancelled: return "CAN"
+        case .postponed: return "PPD"
+        }
+    }
+
+    /// Whether this race is currently live
+    var isLive: Bool {
+        self == .inProgress
+    }
+
     var isActive: Bool {
         self == .inProgress
     }

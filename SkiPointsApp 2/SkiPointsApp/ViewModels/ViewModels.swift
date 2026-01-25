@@ -8,7 +8,7 @@ import Combine
 class RaceListViewModel: ObservableObject {
     @Published var races: [Race] = []
     @Published var isLoading = false
-    @Published var errorMessage: String?
+    @Published var error: Error?
     @Published var lastUpdated: Date?
     @Published var selectedDate: Date = Date()
     
@@ -33,8 +33,8 @@ class RaceListViewModel: ObservableObject {
         }
         
         isLoading = true
-        errorMessage = nil
-        
+        error = nil
+
         print("[RaceListViewModel] Loading races for date: \(selectedDate)")
         
         do {
@@ -69,26 +69,34 @@ class RaceListViewModel: ObservableObject {
             
         } catch {
             print("[RaceListViewModel] Error loading races: \(error)")
-            errorMessage = error.localizedDescription
-            
+            self.error = error
+
             // Fall back to preview data in DEBUG mode
             #if DEBUG
             print("[RaceListViewModel] Using preview data as fallback")
             races = PreviewData.races
             #endif
         }
-        
+
         isLoading = false
     }
-    
+
+    // MARK: - Load Today's Races
+
+    /// Load races for today's date
+    func loadTodaysRaces() async {
+        selectedDate = Date()
+        await loadRaces()
+    }
+
     // MARK: - Refresh
-    
+
     func refresh() async {
         await loadRaces()
     }
-    
+
     // MARK: - Date Selection
-    
+
     func selectDate(_ date: Date) {
         selectedDate = date
         Task {
@@ -143,9 +151,10 @@ class RaceDetailViewModel: ObservableObject {
     @Published var race: Race
     @Published var results: [RaceResult] = []
     @Published var isLoading = false
-    @Published var errorMessage: String?
+    @Published var error: Error?
     @Published var lastUpdated: Date?
-    
+    @Published private(set) var isAutoRefreshing = false
+
     private var autoRefreshTimer: Timer?
     
     init(race: Race) {
@@ -164,8 +173,8 @@ class RaceDetailViewModel: ObservableObject {
         guard !isLoading else { return }
         
         isLoading = true
-        errorMessage = nil
-        
+        error = nil
+
         print("[RaceDetailViewModel] Loading results for race: \(race.id)")
         
         do {
@@ -186,8 +195,8 @@ class RaceDetailViewModel: ObservableObject {
             
         } catch {
             print("[RaceDetailViewModel] Error loading results: \(error)")
-            errorMessage = error.localizedDescription
-            
+            self.error = error
+
             #if DEBUG
             // Use preview data in debug mode
             if race.id == PreviewData.races.first?.id {
@@ -195,7 +204,7 @@ class RaceDetailViewModel: ObservableObject {
             }
             #endif
         }
-        
+
         isLoading = false
     }
     
@@ -253,24 +262,26 @@ class RaceDetailViewModel: ObservableObject {
     }
     
     // MARK: - Auto Refresh
-    
+
     func startAutoRefresh() {
         guard race.isLive else { return }
-        
+
         stopAutoRefresh()
-        
+
         print("[RaceDetailViewModel] Starting auto-refresh for live race")
-        
+        isAutoRefreshing = true
+
         autoRefreshTimer = Timer.scheduledTimer(withTimeInterval: 15, repeats: true) { [weak self] _ in
             Task { @MainActor in
                 await self?.loadResults()
             }
         }
     }
-    
+
     func stopAutoRefresh() {
         autoRefreshTimer?.invalidate()
         autoRefreshTimer = nil
+        isAutoRefreshing = false
     }
     
     // MARK: - Result Categories
@@ -382,45 +393,45 @@ class AthleteSearchViewModel: ObservableObject {
     @Published var searchQuery = ""
     @Published var searchResults: [Athlete] = []
     @Published var isSearching = false
-    @Published var errorMessage: String?
-    
+    @Published var error: Error?
+
     private var searchTask: Task<Void, Never>?
-    
+
     func search() async {
         guard searchQuery.count >= 2 else {
             searchResults = []
             return
         }
-        
+
         searchTask?.cancel()
-        
+
         isSearching = true
-        errorMessage = nil
-        
+        error = nil
+
         print("[AthleteSearchViewModel] Searching for: \(searchQuery)")
-        
+
         searchTask = Task {
             do {
                 // Debounce
                 try await Task.sleep(nanoseconds: 300_000_000)  // 300ms
-                
+
                 guard !Task.isCancelled else { return }
-                
+
                 let service = FISNetworkService.shared
                 let results = try await service.searchAthletes(query: searchQuery)
-                
+
                 guard !Task.isCancelled else { return }
-                
+
                 searchResults = results
                 print("[AthleteSearchViewModel] Found \(results.count) athletes")
-                
+
             } catch {
                 if !Task.isCancelled {
                     print("[AthleteSearchViewModel] Search error: \(error)")
-                    errorMessage = error.localizedDescription
+                    self.error = error
                 }
             }
-            
+
             isSearching = false
         }
     }
