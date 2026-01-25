@@ -1,6 +1,5 @@
 import Foundation
 import SwiftUI
-import Combine
 
 // MARK: - Race List View Model
 
@@ -11,17 +10,11 @@ class RaceListViewModel: ObservableObject {
     @Published var error: Error?
     @Published var lastUpdated: Date?
     @Published var selectedDate: Date = Date()
-    
-    private var refreshTask: Task<Void, Never>?
-    private var autoRefreshTimer: Timer?
-    
+
+    private var autoRefreshTask: Task<Void, Never>?
+
     init() {
         print("[RaceListViewModel] Initialized")
-    }
-    
-    deinit {
-        refreshTask?.cancel()
-        autoRefreshTimer?.invalidate()
     }
     
     // MARK: - Load Races
@@ -105,28 +98,30 @@ class RaceListViewModel: ObservableObject {
     }
     
     // MARK: - Auto Refresh
-    
+
     func startAutoRefresh(interval: TimeInterval = 30) {
         stopAutoRefresh()
-        
+
         print("[RaceListViewModel] Starting auto-refresh every \(interval) seconds")
-        
-        autoRefreshTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] _ in
-            guard let self = self else { return }
-            
-            // Only auto-refresh if there are live races
-            let hasLiveRaces = self.races.contains { $0.isLive }
-            if hasLiveRaces {
-                Task { @MainActor in
-                    await self.loadRaces()
+
+        autoRefreshTask = Task {
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
+
+                guard !Task.isCancelled else { break }
+
+                // Only auto-refresh if there are live races
+                let hasLiveRaces = races.contains { $0.isLive }
+                if hasLiveRaces {
+                    await loadRaces()
                 }
             }
         }
     }
-    
+
     func stopAutoRefresh() {
-        autoRefreshTimer?.invalidate()
-        autoRefreshTimer = nil
+        autoRefreshTask?.cancel()
+        autoRefreshTask = nil
     }
     
     // MARK: - Filtering
@@ -155,16 +150,12 @@ class RaceDetailViewModel: ObservableObject {
     @Published var lastUpdated: Date?
     @Published private(set) var isAutoRefreshing = false
 
-    private var autoRefreshTimer: Timer?
-    
+    private var autoRefreshTask: Task<Void, Never>?
+
     init(race: Race) {
         self.race = race
         self.results = race.results
         print("[RaceDetailViewModel] Initialized for race: \(race.id)")
-    }
-    
-    deinit {
-        autoRefreshTimer?.invalidate()
     }
     
     // MARK: - Load Results
@@ -271,16 +262,20 @@ class RaceDetailViewModel: ObservableObject {
         print("[RaceDetailViewModel] Starting auto-refresh for live race")
         isAutoRefreshing = true
 
-        autoRefreshTimer = Timer.scheduledTimer(withTimeInterval: 15, repeats: true) { [weak self] _ in
-            Task { @MainActor in
-                await self?.loadResults()
+        autoRefreshTask = Task {
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 15_000_000_000)  // 15 seconds
+
+                guard !Task.isCancelled else { break }
+
+                await loadResults()
             }
         }
     }
 
     func stopAutoRefresh() {
-        autoRefreshTimer?.invalidate()
-        autoRefreshTimer = nil
+        autoRefreshTask?.cancel()
+        autoRefreshTask = nil
         isAutoRefreshing = false
     }
     
@@ -443,27 +438,3 @@ class AthleteSearchViewModel: ObservableObject {
     }
 }
 
-// MARK: - App State
-
-@MainActor
-class AppState: ObservableObject {
-    @Published var selectedTab: Tab = .races
-    @Published var isConnected = true
-    
-    enum Tab: Hashable {
-        case races
-        case favorites
-        case settings
-    }
-    
-    init() {
-        print("[AppState] Initialized")
-        setupNetworkMonitoring()
-    }
-    
-    private func setupNetworkMonitoring() {
-        // Basic network monitoring could be added here
-        // For now, we assume connected
-        isConnected = true
-    }
-}

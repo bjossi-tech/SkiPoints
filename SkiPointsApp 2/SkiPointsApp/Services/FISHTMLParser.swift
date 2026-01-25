@@ -292,19 +292,9 @@ struct FISHTMLParser {
             rank += 1
         }
         
-        // Calculate FIS points for finished results
-        if let winner = winnerTime {
-            for i in 0..<results.count {
-                if results[i].status == .finished, let time = results[i].timeSeconds {
-                    results[i].fisPoints = calculateRacePoints(
-                        athleteTime: time,
-                        winnerTime: winner,
-                        discipline: .giantSlalom  // Will need to pass actual discipline
-                    )
-                }
-            }
-        }
-        
+        // Note: FIS points are calculated later in the ViewModel when discipline is known
+        // The parser only extracts raw data without calculating FIS points
+
         print("[FISHTMLParser] Parsed \(results.count) results")
         return results
     }
@@ -620,41 +610,5 @@ struct FISHTMLParser {
             return .finished
         }
         return .scheduled
-    }
-    
-    // MARK: - FIS Points Calculation
-    
-    /// Calculate race points using the official FIS formula
-    /// Race Points = ((Athlete Time - Winner Time) / Winner Time) × F-Factor
-    static func calculateRacePoints(athleteTime: TimeInterval, winnerTime: TimeInterval, discipline: Discipline) -> Double {
-        guard winnerTime > 0, athleteTime >= winnerTime else {
-            return 0.0
-        }
-        
-        let fFactor: Double
-        switch discipline {
-        case .downhill:
-            fFactor = 1330.0
-        case .superG:
-            fFactor = 1190.0
-        case .giantSlalom:
-            fFactor = 1010.0
-        case .slalom:
-            fFactor = 730.0
-        case .combined:
-            fFactor = 1360.0
-        case .parallelSlalom:
-            fFactor = 730.0
-        }
-        
-        let racePoints = ((athleteTime - winnerTime) / winnerTime) * fFactor
-        
-        return max(0.0, round(racePoints * 100) / 100)
-    }
-    
-    /// Calculate FIS points with penalty
-    /// FIS Points = Race Points + Penalty
-    static func calculateFISPoints(racePoints: Double, penalty: Double) -> Double {
-        return max(0.0, racePoints + penalty)
     }
 }

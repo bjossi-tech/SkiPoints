@@ -179,6 +179,7 @@ struct StatusBadge: View {
         case .finished: return .orange
         case .scheduled: return .gray
         case .cancelled: return .gray
+        case .postponed: return .purple
         }
     }
 }
