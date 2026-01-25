@@ -246,29 +246,51 @@ struct PreviewData {
         ),
     ]
     
+    // MARK: - Wengen Super G Sample Race
+
+    static var wengenSuperG: Race {
+        Race(
+            id: "58025",
+            codex: "0010",
+            location: "Wengen",
+            nation: "SUI",
+            date: Calendar.current.date(byAdding: .day, value: 1, to: Date())!,
+            eventType: .worldCup,
+            discipline: .superG,
+            gender: .men,
+            status: .scheduled,
+            results: []
+        )
+    }
+
     // MARK: - Convenience Getters
-    
+
     static var sampleRace: Race {
         races[0]
     }
-    
+
     static var sampleAthlete: Athlete {
         athletes[0]
     }
-    
+
     static var sampleResult: RaceResult {
         races[0].results[0]
     }
-    
+
     static var liveRaces: [Race] {
         races.filter { $0.status == .inProgress }
     }
-    
+
     static var finishedRaces: [Race] {
         races.filter { $0.status == .finished || $0.status == .official }
     }
-    
+
     static var scheduledRaces: [Race] {
         races.filter { $0.status == .scheduled }
+    }
+
+    /// All athletes including sample DNF athlete
+    static var allAthletes: [Athlete] {
+        athletes
     }
 }
