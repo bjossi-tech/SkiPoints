@@ -119,7 +119,7 @@ struct PreviewData {
     static func makeResults(for raceID: String, discipline: Discipline) -> [RaceResult] {
         let selectedAthletes = discipline == .slalom || discipline == .giantSlalom
             ? athletes.filter { $0.gender == .men }
-            : athletes.filter { $0.gender == .men }.prefix(5)
+            : Array(athletes.filter { $0.gender == .men }.prefix(5))
         
         var results: [RaceResult] = []
         var currentTime: TimeInterval = 65.50  // Winner time in seconds
