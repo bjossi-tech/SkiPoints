@@ -39,7 +39,7 @@ struct FISHTMLParser {
             }
             
             let eventID = String(html[eventIDRange])
-            let seasonCode = String(html[seasonRange])
+            _ = String(html[seasonRange]) // seasonCode extracted but not currently used
             
             // Skip duplicates (same event appears multiple times)
             if seenEventIDs.contains(eventID) {
