@@ -178,21 +178,31 @@ struct Race: Identifiable, Codable, Hashable, Sendable {
     let gender: Gender
     var status: RaceStatus
     var results: [RaceResult]
-    
+
+    // MARK: - Cached DateFormatters (for performance)
+
+    private static let mediumDateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        return formatter
+    }()
+
+    private static let shortDateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "d MMM"
+        return formatter
+    }()
+
     var displayTitle: String {
         "\(location) - \(discipline.displayName)"
     }
-    
+
     var formattedDate: String {
-        let formatter = DateFormatter()
-        formatter.dateStyle = .medium
-        return formatter.string(from: date)
+        Self.mediumDateFormatter.string(from: date)
     }
-    
+
     var shortDate: String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "d MMM"
-        return formatter.string(from: date)
+        Self.shortDateFormatter.string(from: date)
     }
     
     var isLive: Bool {
@@ -201,6 +211,11 @@ struct Race: Identifiable, Codable, Hashable, Sendable {
     
     var isFinished: Bool {
         status == .finished || status == .official
+    }
+
+    /// Flag emoji for the race nation
+    var flagEmoji: String {
+        Athlete.flagEmoji(for: nation)
     }
 
     /// Title combining discipline and gender: "Men's Giant Slalom"
@@ -309,11 +324,6 @@ struct RaceResult: Identifiable, Codable, Hashable, Sendable {
         case 3: return .bronze
         default: return nil
         }
-    }
-
-    /// Formatted time difference with + prefix (alias for formattedDifference)
-    var formattedDiff: String {
-        formattedDifference
     }
 
     /// Medal types for podium finishers

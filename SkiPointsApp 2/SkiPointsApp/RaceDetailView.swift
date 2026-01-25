@@ -286,8 +286,8 @@ struct ResultRowView: View {
                     .monospacedDigit()
                 
                 HStack(spacing: 8) {
-                    if !result.formattedDiff.isEmpty {
-                        Text(result.formattedDiff)
+                    if !result.formattedDifference.isEmpty {
+                        Text(result.formattedDifference)
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
