@@ -1,56 +1,197 @@
 import Foundation
 import SwiftUI
+import Combine
 
-// MARK: - Race List ViewModel
+// MARK: - Race List View Model
 
 @MainActor
 class RaceListViewModel: ObservableObject {
     @Published var races: [Race] = []
     @Published var isLoading = false
-    @Published var error: Error?
+    @Published var errorMessage: String?
     @Published var lastUpdated: Date?
+    @Published var selectedDate: Date = Date()
     
-    private let networkService = FISNetworkService.shared
+    private var refreshTask: Task<Void, Never>?
+    private var autoRefreshTimer: Timer?
     
-    var liveRaces: [Race] {
-        races.filter { $0.status.isLive }
+    init() {
+        print("[RaceListViewModel] Initialized")
     }
     
-    var completedRaces: [Race] {
-        races.filter { $0.status == .official || $0.status == .finished }
+    deinit {
+        refreshTask?.cancel()
+        autoRefreshTimer?.invalidate()
+    }
+    
+    // MARK: - Load Races
+    
+    func loadRaces() async {
+        guard !isLoading else {
+            print("[RaceListViewModel] Already loading, skipping")
+            return
+        }
+        
+        isLoading = true
+        errorMessage = nil
+        
+        print("[RaceListViewModel] Loading races for date: \(selectedDate)")
+        
+        do {
+            let service = FISNetworkService.shared
+            
+            // Check if loading for today
+            let calendar = Calendar.current
+            if calendar.isDateInToday(selectedDate) {
+                races = try await service.fetchTodaysRaces()
+            } else {
+                races = try await service.fetchEvents(from: selectedDate, to: selectedDate)
+            }
+            
+            lastUpdated = Date()
+            
+            print("[RaceListViewModel] Loaded \(races.count) races")
+            
+            // Log race details for debugging
+            for race in races {
+                print("  - \(race.location): \(race.discipline.displayName) (\(race.status.displayText))")
+            }
+            
+            // Sort by priority: Live first, then by event type, then by time
+            races.sort { first, second in
+                if first.isLive && !second.isLive { return true }
+                if !first.isLive && second.isLive { return false }
+                if first.eventType.priority != second.eventType.priority {
+                    return first.eventType.priority < second.eventType.priority
+                }
+                return first.date < second.date
+            }
+            
+        } catch {
+            print("[RaceListViewModel] Error loading races: \(error)")
+            errorMessage = error.localizedDescription
+            
+            // Fall back to preview data in DEBUG mode
+            #if DEBUG
+            print("[RaceListViewModel] Using preview data as fallback")
+            races = PreviewData.races
+            #endif
+        }
+        
+        isLoading = false
+    }
+    
+    // MARK: - Refresh
+    
+    func refresh() async {
+        await loadRaces()
+    }
+    
+    // MARK: - Date Selection
+    
+    func selectDate(_ date: Date) {
+        selectedDate = date
+        Task {
+            await loadRaces()
+        }
+    }
+    
+    // MARK: - Auto Refresh
+    
+    func startAutoRefresh(interval: TimeInterval = 30) {
+        stopAutoRefresh()
+        
+        print("[RaceListViewModel] Starting auto-refresh every \(interval) seconds")
+        
+        autoRefreshTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] _ in
+            guard let self = self else { return }
+            
+            // Only auto-refresh if there are live races
+            let hasLiveRaces = self.races.contains { $0.isLive }
+            if hasLiveRaces {
+                Task { @MainActor in
+                    await self.loadRaces()
+                }
+            }
+        }
+    }
+    
+    func stopAutoRefresh() {
+        autoRefreshTimer?.invalidate()
+        autoRefreshTimer = nil
+    }
+    
+    // MARK: - Filtering
+    
+    var liveRaces: [Race] {
+        races.filter { $0.isLive }
     }
     
     var upcomingRaces: [Race] {
         races.filter { $0.status == .scheduled }
     }
     
-    func loadTodaysRaces() async {
+    var completedRaces: [Race] {
+        races.filter { $0.isFinished }
+    }
+}
+
+// MARK: - Race Detail View Model
+
+@MainActor
+class RaceDetailViewModel: ObservableObject {
+    @Published var race: Race
+    @Published var results: [RaceResult] = []
+    @Published var isLoading = false
+    @Published var errorMessage: String?
+    @Published var lastUpdated: Date?
+    
+    private var autoRefreshTimer: Timer?
+    
+    init(race: Race) {
+        self.race = race
+        self.results = race.results
+        print("[RaceDetailViewModel] Initialized for race: \(race.id)")
+    }
+    
+    deinit {
+        autoRefreshTimer?.invalidate()
+    }
+    
+    // MARK: - Load Results
+    
+    func loadResults() async {
+        guard !isLoading else { return }
+        
         isLoading = true
-        error = nil
+        errorMessage = nil
+        
+        print("[RaceDetailViewModel] Loading results for race: \(race.id)")
         
         do {
-            print("[RaceListViewModel] Fetching today's races...")
-            let fetchedRaces = try await networkService.fetchTodaysRaces()
-            print("[RaceListViewModel] Fetched \(fetchedRaces.count) races")
+            let service = FISNetworkService.shared
+            results = try await service.fetchRaceResults(raceID: race.id)
             
-            if fetchedRaces.isEmpty {
-                #if DEBUG
-                print("[RaceListViewModel] No races found, using preview data")
-                races = PreviewData.allRaces
-                #else
-                races = []
-                #endif
-            } else {
-                races = fetchedRaces
-            }
             lastUpdated = Date()
+            
+            print("[RaceDetailViewModel] Loaded \(results.count) results")
+            
+            // Update race with results
+            race.results = results
+            
+            // Recalculate FIS points with penalty
+            if let winnerTime = results.first(where: { $0.status == .finished })?.timeSeconds {
+                calculateAllFISPoints(winnerTime: winnerTime)
+            }
+            
         } catch {
-            print("[RaceListViewModel] Error: \(error.localizedDescription)")
-            self.error = error
+            print("[RaceDetailViewModel] Error loading results: \(error)")
+            errorMessage = error.localizedDescription
+            
             #if DEBUG
-            if races.isEmpty {
-                print("[RaceListViewModel] Using preview data due to error")
-                races = PreviewData.allRaces
+            // Use preview data in debug mode
+            if race.id == PreviewData.races.first?.id {
+                results = PreviewData.races.first?.results ?? []
             }
             #endif
         }
@@ -58,161 +199,260 @@ class RaceListViewModel: ObservableObject {
         isLoading = false
     }
     
-    func loadRaces(from startDate: Date, to endDate: Date) async {
-        isLoading = true
-        error = nil
-        
-        let formatter = DateFormatter()
-        formatter.dateFormat = "dd.MM.yyyy"
-        
-        do {
-            races = try await networkService.fetchRaces(forDate: formatter.string(from: startDate))
-            lastUpdated = Date()
-        } catch {
-            self.error = error
-        }
-        
-        isLoading = false
-    }
+    // MARK: - FIS Points Calculation
     
-    func refresh() async {
-        await loadTodaysRaces()
-    }
-}
-
-// MARK: - Race Detail ViewModel
-
-@MainActor
-class RaceDetailViewModel: ObservableObject {
-    @Published var race: Race
-    @Published var isLoading = false
-    @Published var error: Error?
-    @Published var isAutoRefreshing = false
-    
-    private let networkService = FISNetworkService.shared
-    private var refreshTask: Task<Void, Never>?
-    
-    init(race: Race) {
-        self.race = race
-    }
-    
-    deinit {
-        refreshTask?.cancel()
-    }
-    
-    func loadResults() async {
-        isLoading = true
-        error = nil
+    private func calculateAllFISPoints(winnerTime: TimeInterval) {
+        let penalty = calculateRacePenalty()
         
-        do {
-            print("[RaceDetailViewModel] Loading results for race \(race.id)")
-            let results = try await networkService.fetchRaceResults(raceID: race.id)
-            print("[RaceDetailViewModel] Loaded \(results.count) results")
-            race.results = results
-        } catch {
-            print("[RaceDetailViewModel] Error: \(error.localizedDescription)")
-            self.error = error
-        }
+        print("[RaceDetailViewModel] Calculated penalty: \(penalty)")
         
-        isLoading = false
-    }
-    
-    func startAutoRefresh(interval: TimeInterval = 30) {
-        guard race.isLive else { return }
-        
-        isAutoRefreshing = true
-        refreshTask?.cancel()
-        
-        refreshTask = Task {
-            while !Task.isCancelled && race.isLive {
-                try? await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
-                
-                if !Task.isCancelled {
-                    await loadResults()
-                }
+        for i in 0..<results.count {
+            guard results[i].status == .finished,
+                  let athleteTime = results[i].timeSeconds else {
+                continue
             }
             
-            await MainActor.run {
-                isAutoRefreshing = false
+            let racePoints = FISPointsCalculator.calculateRacePoints(
+                athleteTime: athleteTime,
+                winnerTime: winnerTime,
+                discipline: race.discipline
+            )
+            
+            results[i].fisPoints = FISPointsCalculator.calculateFISPoints(
+                racePoints: racePoints,
+                penalty: penalty
+            )
+        }
+    }
+    
+    private func calculateRacePenalty() -> Double {
+        // Get FIS points of all starters
+        let startersFISPoints = results
+            .map { $0.athlete.points(for: race.discipline) }
+        
+        // Get race points of top 10
+        let top10RacePoints = results
+            .filter { $0.status == .finished }
+            .prefix(10)
+            .compactMap { result -> Double? in
+                guard let athleteTime = result.timeSeconds,
+                      let winnerTime = results.first?.timeSeconds else {
+                    return nil
+                }
+                return FISPointsCalculator.calculateRacePoints(
+                    athleteTime: athleteTime,
+                    winnerTime: winnerTime,
+                    discipline: race.discipline
+                )
+            }
+        
+        return FISPointsCalculator.calculatePenalty(
+            startersFISPoints: startersFISPoints,
+            top10RacePoints: Array(top10RacePoints)
+        )
+    }
+    
+    // MARK: - Auto Refresh
+    
+    func startAutoRefresh() {
+        guard race.isLive else { return }
+        
+        stopAutoRefresh()
+        
+        print("[RaceDetailViewModel] Starting auto-refresh for live race")
+        
+        autoRefreshTimer = Timer.scheduledTimer(withTimeInterval: 15, repeats: true) { [weak self] _ in
+            Task { @MainActor in
+                await self?.loadResults()
             }
         }
     }
     
     func stopAutoRefresh() {
-        refreshTask?.cancel()
-        isAutoRefreshing = false
+        autoRefreshTimer?.invalidate()
+        autoRefreshTimer = nil
+    }
+    
+    // MARK: - Result Categories
+    
+    var podiumResults: [RaceResult] {
+        results.filter { $0.status == .finished && $0.rank <= 3 }
+    }
+    
+    var finishedResults: [RaceResult] {
+        results.filter { $0.status == .finished }
+    }
+    
+    var dnfResults: [RaceResult] {
+        results.filter { $0.status == .didNotFinish }
+    }
+    
+    var dnsResults: [RaceResult] {
+        results.filter { $0.status == .didNotStart }
+    }
+    
+    var dsqResults: [RaceResult] {
+        results.filter { $0.status == .disqualified }
     }
 }
 
-// MARK: - Athlete ViewModel
+// MARK: - Favorites Manager
 
 @MainActor
-class AthleteViewModel: ObservableObject {
-    @Published var athlete: Athlete?
-    @Published var isLoading = false
-    @Published var error: Error?
+class FavoritesManager: ObservableObject {
+    @Published private(set) var favorites: Set<String> = []
+    @Published private(set) var favoriteAthletes: [Athlete] = []
     
-    private let networkService = FISNetworkService.shared
+    private let favoritesKey = "favoriteAthletes"
     
-    func loadAthlete(fisCode: String) async {
-        isLoading = true
-        error = nil
-        
-        do {
-            athlete = try await networkService.fetchAthlete(fisCode: fisCode)
-        } catch {
-            self.error = error
-        }
-        
-        isLoading = false
+    init() {
+        loadFavorites()
     }
-}
-
-// MARK: - Loading State View
-
-struct LoadingView: View {
-    var message: String = "Loading..."
     
-    var body: some View {
-        VStack(spacing: 16) {
-            ProgressView()
-                .scaleEffect(1.2)
-            Text(message)
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    // MARK: - Favorite Management
+    
+    func isFavorite(_ athlete: Athlete) -> Bool {
+        favorites.contains(athlete.fisCode)
     }
-}
-
-// MARK: - Error View
-
-struct ErrorView: View {
-    let error: Error
-    var retryAction: (() async -> Void)?
     
-    var body: some View {
-        ContentUnavailableView {
-            Label("Error", systemImage: "exclamationmark.triangle")
-        } description: {
-            Text(error.localizedDescription)
-        } actions: {
-            if let retry = retryAction {
-                Button("Try Again") {
-                    Task {
-                        await retry()
-                    }
-                }
-                .buttonStyle(.bordered)
+    func toggleFavorite(_ athlete: Athlete) {
+        if favorites.contains(athlete.fisCode) {
+            favorites.remove(athlete.fisCode)
+            favoriteAthletes.removeAll { $0.fisCode == athlete.fisCode }
+        } else {
+            favorites.insert(athlete.fisCode)
+            favoriteAthletes.append(athlete)
+        }
+        saveFavorites()
+    }
+    
+    func addFavorite(_ athlete: Athlete) {
+        guard !favorites.contains(athlete.fisCode) else { return }
+        favorites.insert(athlete.fisCode)
+        favoriteAthletes.append(athlete)
+        saveFavorites()
+    }
+    
+    func removeFavorite(_ athlete: Athlete) {
+        favorites.remove(athlete.fisCode)
+        favoriteAthletes.removeAll { $0.fisCode == athlete.fisCode }
+        saveFavorites()
+    }
+    
+    // MARK: - Persistence
+    
+    private func loadFavorites() {
+        if let savedCodes = UserDefaults.standard.stringArray(forKey: favoritesKey) {
+            favorites = Set(savedCodes)
+            print("[FavoritesManager] Loaded \(favorites.count) favorites")
+        }
+    }
+    
+    private func saveFavorites() {
+        UserDefaults.standard.set(Array(favorites), forKey: favoritesKey)
+        print("[FavoritesManager] Saved \(favorites.count) favorites")
+    }
+    
+    // MARK: - Load Athlete Details
+    
+    func loadFavoriteDetails() async {
+        print("[FavoritesManager] Loading details for \(favorites.count) favorites")
+        
+        var athletes: [Athlete] = []
+        let service = FISNetworkService.shared
+        
+        for fisCode in favorites {
+            do {
+                let athlete = try await service.fetchAthlete(competitorID: fisCode)
+                athletes.append(athlete)
+            } catch {
+                print("[FavoritesManager] Failed to load athlete \(fisCode): \(error)")
             }
         }
+        
+        favoriteAthletes = athletes
+        print("[FavoritesManager] Loaded \(athletes.count) athlete details")
     }
 }
 
-#Preview("Loading") {
-    LoadingView()
+// MARK: - Athlete Search View Model
+
+@MainActor
+class AthleteSearchViewModel: ObservableObject {
+    @Published var searchQuery = ""
+    @Published var searchResults: [Athlete] = []
+    @Published var isSearching = false
+    @Published var errorMessage: String?
+    
+    private var searchTask: Task<Void, Never>?
+    
+    func search() async {
+        guard searchQuery.count >= 2 else {
+            searchResults = []
+            return
+        }
+        
+        searchTask?.cancel()
+        
+        isSearching = true
+        errorMessage = nil
+        
+        print("[AthleteSearchViewModel] Searching for: \(searchQuery)")
+        
+        searchTask = Task {
+            do {
+                // Debounce
+                try await Task.sleep(nanoseconds: 300_000_000)  // 300ms
+                
+                guard !Task.isCancelled else { return }
+                
+                let service = FISNetworkService.shared
+                let results = try await service.searchAthletes(query: searchQuery)
+                
+                guard !Task.isCancelled else { return }
+                
+                searchResults = results
+                print("[AthleteSearchViewModel] Found \(results.count) athletes")
+                
+            } catch {
+                if !Task.isCancelled {
+                    print("[AthleteSearchViewModel] Search error: \(error)")
+                    errorMessage = error.localizedDescription
+                }
+            }
+            
+            isSearching = false
+        }
+    }
+    
+    func clearSearch() {
+        searchQuery = ""
+        searchResults = []
+        searchTask?.cancel()
+    }
 }
 
-#Preview("Error") {
-    ErrorView(error: FISNetworkError.networkError(URLError(.notConnectedToInternet)))
+// MARK: - App State
+
+@MainActor
+class AppState: ObservableObject {
+    @Published var selectedTab: Tab = .races
+    @Published var isConnected = true
+    
+    enum Tab: Hashable {
+        case races
+        case favorites
+        case settings
+    }
+    
+    init() {
+        print("[AppState] Initialized")
+        setupNetworkMonitoring()
+    }
+    
+    private func setupNetworkMonitoring() {
+        // Basic network monitoring could be added here
+        // For now, we assume connected
+        isConnected = true
+    }
 }
