@@ -2,11 +2,11 @@ import SwiftUI
 
 struct RaceDetailView: View {
     @StateObject private var viewModel: RaceDetailViewModel
-    @Binding var favoriteAthletes: Set<String>
-    
-    init(race: Race, favoriteAthletes: Binding<Set<String>>) {
+    @ObservedObject var favoritesManager: FavoritesManager
+
+    init(race: Race, favoritesManager: FavoritesManager) {
         _viewModel = StateObject(wrappedValue: RaceDetailViewModel(race: race))
-        _favoriteAthletes = favoriteAthletes
+        self.favoritesManager = favoritesManager
     }
     
     var body: some View {
@@ -212,13 +212,9 @@ struct RaceDetailView: View {
             ForEach(viewModel.race.results) { result in
                 ResultRowView(
                     result: result,
-                    isFavorite: favoriteAthletes.contains(result.athlete.fisCode),
+                    isFavorite: favoritesManager.favorites.contains(result.athlete.fisCode),
                     onToggleFavorite: {
-                        if favoriteAthletes.contains(result.athlete.fisCode) {
-                            favoriteAthletes.remove(result.athlete.fisCode)
-                        } else {
-                            favoriteAthletes.insert(result.athlete.fisCode)
-                        }
+                        favoritesManager.toggleFavorite(result.athlete)
                     }
                 )
                 
@@ -310,7 +306,7 @@ struct ResultRowView: View {
     NavigationStack {
         RaceDetailView(
             race: PreviewData.wengenSuperG,
-            favoriteAthletes: .constant(["512269"])
+            favoritesManager: FavoritesManager()
         )
     }
 }
