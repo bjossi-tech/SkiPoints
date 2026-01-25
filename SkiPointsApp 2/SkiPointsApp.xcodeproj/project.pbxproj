@@ -19,6 +19,8 @@
 		A100001A001 /* FISNetworkService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100001A000 /* FISNetworkService.swift */; };
 		A100001B001 /* FISHTMLParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100001B000 /* FISHTMLParser.swift */; };
 		A100001C001 /* ViewModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100001C000 /* ViewModels.swift */; };
+		A100001F001 /* ErrorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100001F000 /* ErrorView.swift */; };
+		A1000020001 /* LoadingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000020000 /* LoadingView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -35,6 +37,8 @@
 		A100001A000 /* FISNetworkService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FISNetworkService.swift; sourceTree = "<group>"; };
 		A100001B000 /* FISHTMLParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FISHTMLParser.swift; sourceTree = "<group>"; };
 		A100001C000 /* ViewModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ViewModels.swift; sourceTree = "<group>"; };
+		A100001F000 /* ErrorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ErrorView.swift; sourceTree = "<group>"; };
+		A1000020000 /* LoadingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoadingView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -67,6 +71,8 @@
 				A1000006000 /* RaceDetailView.swift */,
 				A1000007000 /* FavoritesView.swift */,
 				A1000008000 /* SettingsView.swift */,
+				A100001F000 /* ErrorView.swift */,
+				A1000020000 /* LoadingView.swift */,
 				A100001D000 /* Services */,
 				A100001E000 /* ViewModels */,
 				A1000009000 /* Assets.xcassets */,
@@ -176,6 +182,8 @@
 				A1000006001 /* RaceDetailView.swift in Sources */,
 				A1000007001 /* FavoritesView.swift in Sources */,
 				A1000008001 /* SettingsView.swift in Sources */,
+				A100001F001 /* ErrorView.swift in Sources */,
+				A1000020001 /* LoadingView.swift in Sources */,
 				A100001A001 /* FISNetworkService.swift in Sources */,
 				A100001B001 /* FISHTMLParser.swift in Sources */,
 				A100001C001 /* ViewModels.swift in Sources */,
