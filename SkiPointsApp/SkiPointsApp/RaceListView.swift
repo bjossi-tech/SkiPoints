@@ -97,56 +97,57 @@ struct RaceRowView: View {
     var onTap: () -> Void
     
     var body: some View {
-        Button(action: onTap) {
-            HStack(spacing: 12) {
-                // Discipline icon
-                Image(systemName: race.discipline.iconName)
-                    .font(.title2)
-                    .foregroundStyle(.blue)
-                    .frame(width: 44, height: 44)
-                    .background(Circle().fill(.blue.opacity(0.1)))
-                
-                // Race info
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack(spacing: 6) {
-                        Text(race.flagEmoji)
-                        Text(race.location)
-                            .font(.headline)
-                    }
-                    
-                    HStack(spacing: 8) {
-                        Text(race.discipline.displayName)
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                        
-                        Text(race.eventType.shortName)
-                            .font(.caption2)
-                            .fontWeight(.medium)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(Capsule().fill(.orange.opacity(0.2)))
-                            .foregroundStyle(.orange)
-                    }
+        HStack(spacing: 12) {
+            // Discipline icon
+            Image(systemName: race.discipline.iconName)
+                .font(.title2)
+                .foregroundStyle(.blue)
+                .frame(width: 44, height: 44)
+                .background(Circle().fill(.blue.opacity(0.1)))
+
+            // Race info
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 6) {
+                    Text(race.flagEmoji)
+                    Text(race.location)
+                        .font(.headline)
                 }
-                
-                Spacer()
-                
-                // Status
-                VStack(alignment: .trailing, spacing: 4) {
-                    StatusBadge(status: race.status)
-                    
-                    if let winner = race.winner {
-                        Text(winner.athlete.shortName)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
+
+                HStack(spacing: 8) {
+                    Text(race.discipline.displayName)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+
+                    Text(race.eventType.shortName)
+                        .font(.caption2)
+                        .fontWeight(.medium)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(Capsule().fill(.orange.opacity(0.2)))
+                        .foregroundStyle(.orange)
                 }
             }
-            .padding()
-            .background(RoundedRectangle(cornerRadius: 12).fill(.background))
-            .shadow(color: .black.opacity(0.05), radius: 2, y: 1)
+
+            Spacer()
+
+            // Status
+            VStack(alignment: .trailing, spacing: 4) {
+                StatusBadge(status: race.status)
+
+                if let winner = race.winner {
+                    Text(winner.athlete.shortName)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
         }
-        .buttonStyle(.plain)
+        .padding()
+        .background(RoundedRectangle(cornerRadius: 12).fill(.background))
+        .shadow(color: .black.opacity(0.05), radius: 2, y: 1)
+        .contentShape(Rectangle())
+        .onTapGesture {
+            onTap()
+        }
     }
 }
 
