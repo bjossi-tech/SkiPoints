@@ -7,16 +7,18 @@ struct SettingsView: View {
                 HStack {
                     Label("Version", systemImage: "info.circle")
                     Spacer()
-                    Text("1.0.0")
+                    Text(AppConstants.AppInfo.version)
                         .foregroundStyle(.secondary)
                 }
-                
-                Link(destination: URL(string: "https://www.fis-ski.com")!) {
-                    HStack {
-                        Label("FIS Website", systemImage: "globe")
-                        Spacer()
-                        Image(systemName: "arrow.up.right.square")
-                            .foregroundStyle(.secondary)
+
+                if let fisURL = URL(string: AppConstants.AppInfo.fisWebsiteURL) {
+                    Link(destination: fisURL) {
+                        HStack {
+                            Label("FIS Website", systemImage: "globe")
+                            Spacer()
+                            Image(systemName: "arrow.up.right.square")
+                                .foregroundStyle(.secondary)
+                        }
                     }
                 }
             }
@@ -25,7 +27,7 @@ struct SettingsView: View {
                 HStack {
                     Label("Developer", systemImage: "person")
                     Spacer()
-                    Text("Björn")
+                    Text(AppConstants.AppInfo.developer)
                         .foregroundStyle(.secondary)
                 }
             }

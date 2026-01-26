@@ -1,5 +1,6 @@
 import Foundation
 import SwiftUI
+import os.log
 
 // MARK: - Race List View Model
 
@@ -14,21 +15,21 @@ class RaceListViewModel: ObservableObject {
     private var autoRefreshTask: Task<Void, Never>?
 
     init() {
-        print("[RaceListViewModel] Initialized")
+        Log.viewModel.debug("[RaceListViewModel] Initialized")
     }
     
     // MARK: - Load Races
     
     func loadRaces() async {
         guard !isLoading else {
-            print("[RaceListViewModel] Already loading, skipping")
+            Log.viewModel.debug("[RaceListViewModel] Already loading, skipping")
             return
         }
         
         isLoading = true
         error = nil
 
-        print("[RaceListViewModel] Loading races for date: \(selectedDate)")
+        Log.viewModel.debug("[RaceListViewModel] Loading races for date: \(selectedDate)")
         
         do {
             let service = FISNetworkService.shared
@@ -43,7 +44,7 @@ class RaceListViewModel: ObservableObject {
             
             lastUpdated = Date()
             
-            print("[RaceListViewModel] Loaded \(races.count) races")
+            Log.viewModel.debug("[RaceListViewModel] Loaded \(races.count) races")
             
             // Log race details for debugging
             for race in races {
@@ -61,12 +62,12 @@ class RaceListViewModel: ObservableObject {
             }
             
         } catch {
-            print("[RaceListViewModel] Error loading races: \(error)")
+            Log.viewModel.debug("[RaceListViewModel] Error loading races: \(error)")
             self.error = error
 
             // Fall back to preview data in DEBUG mode
             #if DEBUG
-            print("[RaceListViewModel] Using preview data as fallback")
+            Log.viewModel.debug("[RaceListViewModel] Using preview data as fallback")
             races = PreviewData.races
             #endif
         }
@@ -99,10 +100,10 @@ class RaceListViewModel: ObservableObject {
     
     // MARK: - Auto Refresh
 
-    func startAutoRefresh(interval: TimeInterval = 30) {
+    func startAutoRefresh(interval: TimeInterval = AppConstants.RefreshInterval.raceListSeconds) {
         stopAutoRefresh()
 
-        print("[RaceListViewModel] Starting auto-refresh every \(interval) seconds")
+        Log.viewModel.debug("[RaceListViewModel] Starting auto-refresh every \(interval) seconds")
 
         autoRefreshTask = Task {
             while !Task.isCancelled {
@@ -155,7 +156,7 @@ class RaceDetailViewModel: ObservableObject {
     init(race: Race) {
         self.race = race
         self.results = race.results
-        print("[RaceDetailViewModel] Initialized for race: \(race.id)")
+        Log.viewModel.debug("[RaceDetailViewModel] Initialized for race: \(race.id)")
     }
     
     // MARK: - Load Results
@@ -166,7 +167,7 @@ class RaceDetailViewModel: ObservableObject {
         isLoading = true
         error = nil
 
-        print("[RaceDetailViewModel] Loading results for race: \(race.id)")
+        Log.viewModel.debug("[RaceDetailViewModel] Loading results for race: \(race.id)")
         
         do {
             let service = FISNetworkService.shared
@@ -174,7 +175,7 @@ class RaceDetailViewModel: ObservableObject {
             
             lastUpdated = Date()
             
-            print("[RaceDetailViewModel] Loaded \(results.count) results")
+            Log.viewModel.debug("[RaceDetailViewModel] Loaded \(results.count) results")
             
             // Update race with results
             race.results = results
@@ -185,7 +186,7 @@ class RaceDetailViewModel: ObservableObject {
             }
             
         } catch {
-            print("[RaceDetailViewModel] Error loading results: \(error)")
+            Log.viewModel.debug("[RaceDetailViewModel] Error loading results: \(error)")
             self.error = error
 
             #if DEBUG
@@ -204,7 +205,7 @@ class RaceDetailViewModel: ObservableObject {
     private func calculateAllFISPoints(winnerTime: TimeInterval) {
         let penalty = calculateRacePenalty()
         
-        print("[RaceDetailViewModel] Calculated penalty: \(penalty)")
+        Log.viewModel.debug("[RaceDetailViewModel] Calculated penalty: \(penalty)")
         
         for i in 0..<results.count {
             guard results[i].status == .finished,
@@ -259,12 +260,12 @@ class RaceDetailViewModel: ObservableObject {
 
         stopAutoRefresh()
 
-        print("[RaceDetailViewModel] Starting auto-refresh for live race")
+        Log.viewModel.debug("[RaceDetailViewModel] Starting auto-refresh for live race")
         isAutoRefreshing = true
 
         autoRefreshTask = Task {
             while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: 15_000_000_000)  // 15 seconds
+                try? await Task.sleep(nanoseconds: UInt64(AppConstants.RefreshInterval.liveRaceSeconds * 1_000_000_000))
 
                 guard !Task.isCancelled else { break }
 
@@ -309,8 +310,8 @@ class FavoritesManager: ObservableObject {
     @Published private(set) var favorites: Set<String> = []
     @Published private(set) var favoriteAthletes: [Athlete] = []
 
-    private let favoritesKey = "favoriteAthletes"
-    private let athletesDataKey = "favoriteAthletesData"
+    private let favoritesKey = AppConstants.UserDefaultsKeys.favoriteAthletes
+    private let athletesDataKey = AppConstants.UserDefaultsKeys.favoriteAthletesData
 
     init() {
         loadFavorites()
@@ -359,12 +360,12 @@ class FavoritesManager: ObservableObject {
             do {
                 let athletes = try JSONDecoder().decode([Athlete].self, from: data)
                 favoriteAthletes = athletes
-                print("[FavoritesManager] Loaded \(favorites.count) favorites with athlete data")
+                Log.favorites.debug("[FavoritesManager] Loaded \(favorites.count) favorites with athlete data")
             } catch {
-                print("[FavoritesManager] Failed to decode athletes: \(error)")
+                Log.favorites.debug("[FavoritesManager] Failed to decode athletes: \(error)")
             }
         } else {
-            print("[FavoritesManager] Loaded \(favorites.count) favorites (no athlete data)")
+            Log.favorites.debug("[FavoritesManager] Loaded \(favorites.count) favorites (no athlete data)")
         }
     }
 
@@ -376,16 +377,16 @@ class FavoritesManager: ObservableObject {
         do {
             let data = try JSONEncoder().encode(favoriteAthletes)
             UserDefaults.standard.set(data, forKey: athletesDataKey)
-            print("[FavoritesManager] Saved \(favorites.count) favorites with athlete data")
+            Log.favorites.debug("[FavoritesManager] Saved \(favorites.count) favorites with athlete data")
         } catch {
-            print("[FavoritesManager] Failed to encode athletes: \(error)")
+            Log.favorites.debug("[FavoritesManager] Failed to encode athletes: \(error)")
         }
     }
 
     // MARK: - Load Athlete Details
 
     func loadFavoriteDetails() async {
-        print("[FavoritesManager] Loading details for \(favorites.count) favorites")
+        Log.favorites.debug("[FavoritesManager] Loading details for \(favorites.count) favorites")
 
         var athletes: [Athlete] = []
         let service = FISNetworkService.shared
@@ -395,13 +396,13 @@ class FavoritesManager: ObservableObject {
                 let athlete = try await service.fetchAthlete(competitorID: fisCode)
                 athletes.append(athlete)
             } catch {
-                print("[FavoritesManager] Failed to load athlete \(fisCode): \(error)")
+                Log.favorites.debug("[FavoritesManager] Failed to load athlete \(fisCode): \(error)")
             }
         }
 
         favoriteAthletes = athletes
         saveFavorites()  // Persist the loaded athlete data
-        print("[FavoritesManager] Loaded \(athletes.count) athlete details")
+        Log.favorites.debug("[FavoritesManager] Loaded \(athletes.count) athlete details")
     }
 }
 
@@ -417,7 +418,7 @@ class AthleteSearchViewModel: ObservableObject {
     private var searchTask: Task<Void, Never>?
 
     func search() async {
-        guard searchQuery.count >= 2 else {
+        guard searchQuery.count >= AppConstants.Search.minimumQueryLength else {
             searchResults = []
             return
         }
@@ -427,12 +428,12 @@ class AthleteSearchViewModel: ObservableObject {
         isSearching = true
         error = nil
 
-        print("[AthleteSearchViewModel] Searching for: \(searchQuery)")
+        Log.search.debug("[AthleteSearchViewModel] Searching for: \(searchQuery)")
 
         searchTask = Task {
             do {
                 // Debounce
-                try await Task.sleep(nanoseconds: 300_000_000)  // 300ms
+                try await Task.sleep(nanoseconds: AppConstants.RefreshInterval.searchDebounceNanoseconds)
 
                 guard !Task.isCancelled else { return }
 
@@ -442,11 +443,11 @@ class AthleteSearchViewModel: ObservableObject {
                 guard !Task.isCancelled else { return }
 
                 searchResults = results
-                print("[AthleteSearchViewModel] Found \(results.count) athletes")
+                Log.search.debug("[AthleteSearchViewModel] Found \(results.count) athletes")
 
             } catch {
                 if !Task.isCancelled {
-                    print("[AthleteSearchViewModel] Search error: \(error)")
+                    Log.search.debug("[AthleteSearchViewModel] Search error: \(error)")
                     self.error = error
                 }
             }

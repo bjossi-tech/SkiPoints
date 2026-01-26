@@ -1,4 +1,5 @@
 import Foundation
+import os.log
 
 // MARK: - Network Errors
 
@@ -35,15 +36,15 @@ enum FISNetworkError: Error, LocalizedError {
 
 actor FISNetworkService {
     static let shared = FISNetworkService()
-    
-    private let baseURL = "https://www.fis-ski.com"
+
+    private let baseURL = AppConstants.Network.baseURL
     private let session: URLSession
     private var lastRequestTime: Date?
-    private let minimumRequestInterval: TimeInterval = 0.5
-    
+    private let minimumRequestInterval: TimeInterval = AppConstants.Network.minimumRequestInterval
+
     private init() {
         let config = URLSessionConfiguration.default
-        config.timeoutIntervalForRequest = 30
+        config.timeoutIntervalForRequest = AppConstants.Network.requestTimeoutSeconds
         // CRITICAL: Use a proper browser User-Agent - FIS blocks non-browser requests
         config.httpAdditionalHeaders = [
             "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1",
@@ -86,7 +87,7 @@ actor FISNetworkService {
             throw FISNetworkError.invalidURL
         }
         
-        print("[FISNetworkService] Fetching calendar from: \(urlString)")
+        Log.network.debug("[FISNetworkService] Fetching calendar from: \(urlString)")
         
         let html = try await fetchHTML(from: url)
         
@@ -95,13 +96,17 @@ actor FISNetworkService {
         
         // Filter to today's events
         let today = calendar.startOfDay(for: now)
-        let tomorrow = calendar.date(byAdding: .day, value: 1, to: today)!
-        
+        guard let tomorrow = calendar.date(byAdding: .day, value: 1, to: today) else {
+            return allEvents.filter { event in
+                calendar.isDate(event.date, inSameDayAs: today)
+            }
+        }
+
         let todaysEvents = allEvents.filter { event in
             event.date >= today && event.date < tomorrow
         }
         
-        print("[FISNetworkService] Found \(todaysEvents.count) events for today out of \(allEvents.count) total")
+        Log.network.debug("[FISNetworkService] Found \(todaysEvents.count) events for today out of \(allEvents.count) total")
         
         return todaysEvents
     }
@@ -124,8 +129,12 @@ actor FISNetworkService {
         
         // Filter to date range
         let startOfStartDate = calendar.startOfDay(for: startDate)
-        let endOfEndDate = calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: endDate))!
-        
+        guard let endOfEndDate = calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: endDate)) else {
+            return allEvents.filter { event in
+                event.date >= startOfStartDate
+            }
+        }
+
         return allEvents.filter { event in
             event.date >= startOfStartDate && event.date < endOfEndDate
         }
@@ -144,7 +153,7 @@ actor FISNetworkService {
             throw FISNetworkError.invalidURL
         }
         
-        print("[FISNetworkService] Fetching event details from: \(urlString)")
+        Log.network.debug("[FISNetworkService] Fetching event details from: \(urlString)")
         
         let html = try await fetchHTML(from: url)
         return try FISHTMLParser.parseEventDetails(html: html, eventID: eventID)
@@ -162,7 +171,7 @@ actor FISNetworkService {
             throw FISNetworkError.invalidURL
         }
         
-        print("[FISNetworkService] Fetching race results from: \(urlString)")
+        Log.network.debug("[FISNetworkService] Fetching race results from: \(urlString)")
         
         let html = try await fetchHTML(from: url)
         return try FISHTMLParser.parseRaceResults(html: html, raceID: raceID)
@@ -181,7 +190,7 @@ actor FISNetworkService {
             throw FISNetworkError.invalidURL
         }
         
-        print("[FISNetworkService] Fetching live data from: \(urlString)")
+        Log.network.debug("[FISNetworkService] Fetching live data from: \(urlString)")
         
         let html = try await fetchHTML(from: url)
         return try FISHTMLParser.parseRaceResults(html: html, raceID: raceID)
@@ -199,7 +208,7 @@ actor FISNetworkService {
             throw FISNetworkError.invalidURL
         }
         
-        print("[FISNetworkService] Fetching athlete from: \(urlString)")
+        Log.network.debug("[FISNetworkService] Fetching athlete from: \(urlString)")
         
         let html = try await fetchHTML(from: url)
         return try FISHTMLParser.parseAthleteBiography(html: html, competitorID: competitorID)
@@ -218,7 +227,7 @@ actor FISNetworkService {
             throw FISNetworkError.invalidURL
         }
         
-        print("[FISNetworkService] Searching athletes: \(urlString)")
+        Log.network.debug("[FISNetworkService] Searching athletes: \(urlString)")
         
         let html = try await fetchHTML(from: url)
         return try FISHTMLParser.parseAthleteSearch(html: html)
@@ -242,7 +251,7 @@ actor FISNetworkService {
                 throw FISNetworkError.invalidResponse
             }
             
-            print("[FISNetworkService] HTTP Status: \(httpResponse.statusCode)")
+            Log.network.debug("[FISNetworkService] HTTP Status: \(httpResponse.statusCode)")
             
             switch httpResponse.statusCode {
             case 200...299:
@@ -250,7 +259,7 @@ actor FISNetworkService {
             case 429:
                 throw FISNetworkError.rateLimited
             case 403:
-                print("[FISNetworkService] 403 Forbidden - may need different User-Agent")
+                Log.network.debug("[FISNetworkService] 403 Forbidden - may need different User-Agent")
                 throw FISNetworkError.httpError(403)
             default:
                 throw FISNetworkError.httpError(httpResponse.statusCode)
@@ -258,10 +267,10 @@ actor FISNetworkService {
             
             // Try UTF-8 first, then ISO-8859-1 (FIS uses both)
             if let html = String(data: data, encoding: .utf8) {
-                print("[FISNetworkService] Received \(html.count) characters (UTF-8)")
+                Log.network.debug("[FISNetworkService] Received \(html.count) characters (UTF-8)")
                 return html
             } else if let html = String(data: data, encoding: .isoLatin1) {
-                print("[FISNetworkService] Received \(html.count) characters (ISO-8859-1)")
+                Log.network.debug("[FISNetworkService] Received \(html.count) characters (ISO-8859-1)")
                 return html
             } else {
                 throw FISNetworkError.noData

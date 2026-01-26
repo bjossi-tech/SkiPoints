@@ -1,4 +1,5 @@
 import Foundation
+import os.log
 
 /// Parser for FIS website HTML content
 /// Note: The FIS website is built with React/Next.js and much of the content
@@ -12,7 +13,7 @@ struct FISHTMLParser {
     static func parseCalendarEvents(html: String) throws -> [Race] {
         var events: [Race] = []
         
-        print("[FISHTMLParser] Parsing calendar HTML (\(html.count) chars)")
+        Log.parser.debug("[FISHTMLParser] Parsing calendar HTML (\(html.count) chars)")
         
         // FIS calendar structure:
         // Links follow pattern: /DB/general/event-details.html?sectorcode=AL&eventid=58544&seasoncode=2026
@@ -28,7 +29,7 @@ struct FISHTMLParser {
         let range = NSRange(html.startIndex..., in: html)
         let matches = eventRegex.matches(in: html, options: [], range: range)
         
-        print("[FISHTMLParser] Found \(matches.count) event links")
+        Log.parser.debug("[FISHTMLParser] Found \(matches.count) event links")
         
         var seenEventIDs = Set<String>()
         
@@ -65,7 +66,7 @@ struct FISHTMLParser {
             }
         }
         
-        print("[FISHTMLParser] Parsed \(events.count) unique events")
+        Log.parser.debug("[FISHTMLParser] Parsed \(events.count) unique events")
         return events
     }
     
@@ -135,7 +136,7 @@ struct FISHTMLParser {
     static func parseEventDetails(html: String, eventID: String) throws -> [Race] {
         var races: [Race] = []
         
-        print("[FISHTMLParser] Parsing event details for event \(eventID)")
+        Log.parser.debug("[FISHTMLParser] Parsing event details for event \(eventID)")
         
         // Look for race links within the event page
         // Pattern: results.html?sectorcode=AL&raceid=XXXXX
@@ -180,7 +181,7 @@ struct FISHTMLParser {
             races.append(race)
         }
         
-        print("[FISHTMLParser] Found \(races.count) races in event")
+        Log.parser.debug("[FISHTMLParser] Found \(races.count) races in event")
         return races
     }
     
@@ -217,7 +218,7 @@ struct FISHTMLParser {
     static func parseRaceResults(html: String, raceID: String) throws -> [RaceResult] {
         var results: [RaceResult] = []
         
-        print("[FISHTMLParser] Parsing results for race \(raceID)")
+        Log.parser.debug("[FISHTMLParser] Parsing results for race \(raceID)")
         
         // FIS results page has competitor rows with competitorid parameter
         // Pattern: competitorid=XXXXX
@@ -295,7 +296,7 @@ struct FISHTMLParser {
         // Note: FIS points are calculated later in the ViewModel when discipline is known
         // The parser only extracts raw data without calculating FIS points
 
-        print("[FISHTMLParser] Parsed \(results.count) results")
+        Log.parser.debug("[FISHTMLParser] Parsed \(results.count) results")
         return results
     }
     
@@ -359,7 +360,7 @@ struct FISHTMLParser {
     
     /// Parse athlete details from biography page
     static func parseAthleteBiography(html: String, competitorID: String) throws -> Athlete {
-        print("[FISHTMLParser] Parsing athlete biography for \(competitorID)")
+        Log.parser.debug("[FISHTMLParser] Parsing athlete biography for \(competitorID)")
         
         // Extract name
         var firstName = "Unknown"
