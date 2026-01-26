@@ -145,55 +145,164 @@ class RaceListViewModel: ObservableObject {
 class RaceDetailViewModel: ObservableObject {
     @Published var race: Race
     @Published var results: [RaceResult] = []
+    @Published var eventRaces: [Race] = []  // Sub-races within this event
+    @Published var selectedRaceID: String?  // Currently selected race for results
     @Published var isLoading = false
     @Published var error: Error?
     @Published var lastUpdated: Date?
     @Published private(set) var isAutoRefreshing = false
+    @Published var resultsUnavailable = false  // True when results can't be loaded
 
     private var autoRefreshTask: Task<Void, Never>?
 
     init(race: Race) {
         self.race = race
         self.results = race.results
-        print("[RaceDetailViewModel] Initialized for race: \(race.id)")
+        print("[RaceDetailViewModel] Initialized for event: \(race.id)")
     }
-    
+
     // MARK: - Load Results
-    
+
     func loadResults() async {
         guard !isLoading else { return }
-        
+
         isLoading = true
         error = nil
+        resultsUnavailable = false
 
-        print("[RaceDetailViewModel] Loading results for race: \(race.id)")
-        
+        print("[RaceDetailViewModel] Loading results for event: \(race.id)")
+
+        let service = FISNetworkService.shared
+
+        // Step 1: Try to fetch event details to get actual race IDs
+        do {
+            let races = try await service.fetchEventDetails(eventID: race.id)
+
+            if !races.isEmpty {
+                eventRaces = races
+                print("[RaceDetailViewModel] Found \(races.count) races in event")
+
+                // Update location from event details if we have it
+                if let firstRace = races.first, race.location == "Unknown Location" {
+                    race = Race(
+                        id: race.id,
+                        codex: race.codex,
+                        location: firstRace.location != "Unknown" ? firstRace.location : race.location,
+                        nation: firstRace.nation != "---" ? firstRace.nation : race.nation,
+                        date: race.date,
+                        eventType: race.eventType,
+                        discipline: firstRace.discipline,
+                        gender: firstRace.gender,
+                        status: race.status,
+                        results: []
+                    )
+                }
+
+                // Step 2: Try to fetch results for the first race with results
+                for eventRace in races {
+                    do {
+                        let raceResults = try await service.fetchRaceResults(raceID: eventRace.id)
+                        if !raceResults.isEmpty {
+                            results = raceResults
+                            selectedRaceID = eventRace.id
+                            lastUpdated = Date()
+
+                            // Update the displayed race info
+                            race = eventRace
+                            race.results = results
+
+                            print("[RaceDetailViewModel] Loaded \(results.count) results for race \(eventRace.id)")
+
+                            // Recalculate FIS points
+                            if let winnerTime = results.first(where: { $0.status == .finished })?.timeSeconds {
+                                calculateAllFISPoints(winnerTime: winnerTime)
+                            }
+
+                            isLoading = false
+                            return
+                        }
+                    } catch {
+                        print("[RaceDetailViewModel] Could not load results for race \(eventRace.id): \(error)")
+                        // Continue to next race
+                    }
+                }
+
+                // No results found for any race in the event
+                print("[RaceDetailViewModel] No results available for any race in this event")
+                resultsUnavailable = true
+                lastUpdated = Date()
+                isLoading = false
+                return
+            }
+        } catch {
+            print("[RaceDetailViewModel] Could not fetch event details: \(error)")
+            // Fall through to try direct results fetch
+        }
+
+        // Step 3: Fallback - try direct results fetch with the ID we have
+        do {
+            results = try await service.fetchRaceResults(raceID: race.id)
+
+            if !results.isEmpty {
+                lastUpdated = Date()
+                print("[RaceDetailViewModel] Loaded \(results.count) results (direct fetch)")
+
+                race.results = results
+
+                if let winnerTime = results.first(where: { $0.status == .finished })?.timeSeconds {
+                    calculateAllFISPoints(winnerTime: winnerTime)
+                }
+            } else {
+                resultsUnavailable = true
+            }
+        } catch {
+            print("[RaceDetailViewModel] Error loading results: \(error)")
+
+            // Check if it's a 404 error - results not available yet
+            if case FISNetworkError.httpError(404) = error {
+                resultsUnavailable = true
+            } else {
+                self.error = error
+            }
+
+            #if DEBUG
+            // Use preview data in debug mode for matching IDs
+            if race.id == PreviewData.races.first?.id {
+                results = PreviewData.races.first?.results ?? []
+                resultsUnavailable = false
+            }
+            #endif
+        }
+
+        isLoading = false
+    }
+
+    /// Load results for a specific race within the event
+    func loadResultsForRace(_ raceID: String) async {
+        guard let eventRace = eventRaces.first(where: { $0.id == raceID }) else { return }
+
+        isLoading = true
+        error = nil
+        resultsUnavailable = false
+
         do {
             let service = FISNetworkService.shared
-            results = try await service.fetchRaceResults(raceID: race.id)
-            
-            lastUpdated = Date()
-            
-            print("[RaceDetailViewModel] Loaded \(results.count) results")
-            
-            // Update race with results
+            results = try await service.fetchRaceResults(raceID: raceID)
+            selectedRaceID = raceID
+            race = eventRace
             race.results = results
-            
-            // Recalculate FIS points with penalty
+            lastUpdated = Date()
+
             if let winnerTime = results.first(where: { $0.status == .finished })?.timeSeconds {
                 calculateAllFISPoints(winnerTime: winnerTime)
             }
-            
         } catch {
-            print("[RaceDetailViewModel] Error loading results: \(error)")
-            self.error = error
-
-            #if DEBUG
-            // Use preview data in debug mode
-            if race.id == PreviewData.races.first?.id {
-                results = PreviewData.races.first?.results ?? []
+            print("[RaceDetailViewModel] Error loading results for race \(raceID): \(error)")
+            if case FISNetworkError.httpError(404) = error {
+                resultsUnavailable = true
+            } else {
+                self.error = error
             }
-            #endif
         }
 
         isLoading = false

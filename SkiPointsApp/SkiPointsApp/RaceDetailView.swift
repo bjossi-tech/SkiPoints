@@ -14,33 +14,43 @@ struct RaceDetailView: View {
             LazyVStack(spacing: 20) {
                 // Race header
                 raceHeader
-                
+
+                // Event races picker (if multiple races in event)
+                if viewModel.eventRaces.count > 1 {
+                    eventRacesPicker
+                }
+
                 // Live indicator with auto-refresh status
                 if viewModel.race.isLive {
                     liveIndicator
                 }
-                
+
                 // Loading state for results
-                if viewModel.isLoading && viewModel.race.results.isEmpty {
+                if viewModel.isLoading && viewModel.results.isEmpty {
                     ProgressView("Loading results...")
                         .padding(.vertical, 40)
                 }
-                
-                // Error state
-                if let error = viewModel.error, viewModel.race.results.isEmpty {
+
+                // Results unavailable state (friendly message for 404s)
+                if viewModel.resultsUnavailable && !viewModel.isLoading {
+                    resultsUnavailableView
+                }
+
+                // Error state (only for actual errors, not 404s)
+                if let error = viewModel.error, viewModel.results.isEmpty && !viewModel.resultsUnavailable {
                     ErrorView(error: error) {
                         await viewModel.loadResults()
                     }
                     .padding()
                 }
-                
+
                 // Podium
                 if !viewModel.race.podium.isEmpty {
                     podiumView
                 }
-                
+
                 // Full results
-                if !viewModel.race.results.isEmpty {
+                if !viewModel.results.isEmpty {
                     resultsSection
                 }
             }
@@ -61,6 +71,73 @@ struct RaceDetailView: View {
         .refreshable {
             await viewModel.loadResults()
         }
+    }
+
+    // MARK: - Event Races Picker
+
+    private var eventRacesPicker: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Races in this event")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(viewModel.eventRaces) { eventRace in
+                        Button {
+                            Task {
+                                await viewModel.loadResultsForRace(eventRace.id)
+                            }
+                        } label: {
+                            VStack(spacing: 4) {
+                                Text(eventRace.discipline.shortName)
+                                    .font(.caption)
+                                    .fontWeight(.semibold)
+                                Text(eventRace.gender.displayName)
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                            }
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 8)
+                            .background(
+                                RoundedRectangle(cornerRadius: 8)
+                                    .fill(viewModel.selectedRaceID == eventRace.id ? Color.blue : Color(.secondarySystemBackground))
+                            )
+                            .foregroundStyle(viewModel.selectedRaceID == eventRace.id ? .white : .primary)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+        }
+        .padding()
+        .background(RoundedRectangle(cornerRadius: 12).fill(.background))
+    }
+
+    // MARK: - Results Unavailable View
+
+    private var resultsUnavailableView: some View {
+        VStack(spacing: 16) {
+            Image(systemName: "clock.badge.questionmark")
+                .font(.system(size: 48))
+                .foregroundStyle(.secondary)
+
+            Text("Results Not Available")
+                .font(.headline)
+
+            Text("Results for this race haven't been published yet. Check back later or pull to refresh.")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+
+            if viewModel.race.status == .scheduled {
+                Text("Race is scheduled for \(viewModel.race.formattedDate)")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+            }
+        }
+        .padding(.vertical, 40)
+        .padding(.horizontal)
     }
     
     // MARK: - Race Header
@@ -209,7 +286,7 @@ struct RaceDetailView: View {
                 }
             }
             
-            ForEach(viewModel.race.results) { result in
+            ForEach(viewModel.results) { result in
                 ResultRowView(
                     result: result,
                     isFavorite: favoritesManager.favorites.contains(result.athlete.fisCode),
@@ -217,8 +294,8 @@ struct RaceDetailView: View {
                         favoritesManager.toggleFavorite(result.athlete)
                     }
                 )
-                
-                if result.id != viewModel.race.results.last?.id {
+
+                if result.id != viewModel.results.last?.id {
                     Divider()
                 }
             }
