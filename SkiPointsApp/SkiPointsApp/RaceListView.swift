@@ -1,10 +1,10 @@
 import SwiftUI
 
 struct RaceListView: View {
-    @Binding var favoriteAthletes: Set<String>
+    @ObservedObject var favoritesManager: FavoritesManager
     @StateObject private var viewModel = RaceListViewModel()
     @State private var selectedRace: Race?
-    
+
     var body: some View {
         Group {
             if viewModel.isLoading && viewModel.races.isEmpty {
@@ -26,7 +26,7 @@ struct RaceListView: View {
         .background(Color(.systemGroupedBackground))
         .navigationTitle("Races")
         .navigationDestination(item: $selectedRace) { race in
-            RaceDetailView(race: race, favoriteAthletes: $favoriteAthletes)
+            RaceDetailView(race: race, favoritesManager: favoritesManager)
         }
         .task {
             await viewModel.loadTodaysRaces()
@@ -186,6 +186,6 @@ struct StatusBadge: View {
 
 #Preview {
     NavigationStack {
-        RaceListView(favoriteAthletes: .constant([]))
+        RaceListView(favoritesManager: FavoritesManager())
     }
 }

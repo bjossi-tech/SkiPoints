@@ -308,19 +308,20 @@ class RaceDetailViewModel: ObservableObject {
 class FavoritesManager: ObservableObject {
     @Published private(set) var favorites: Set<String> = []
     @Published private(set) var favoriteAthletes: [Athlete] = []
-    
+
     private let favoritesKey = "favoriteAthletes"
-    
+    private let athletesDataKey = "favoriteAthletesData"
+
     init() {
         loadFavorites()
     }
-    
+
     // MARK: - Favorite Management
-    
+
     func isFavorite(_ athlete: Athlete) -> Bool {
         favorites.contains(athlete.fisCode)
     }
-    
+
     func toggleFavorite(_ athlete: Athlete) {
         if favorites.contains(athlete.fisCode) {
             favorites.remove(athlete.fisCode)
@@ -331,42 +332,64 @@ class FavoritesManager: ObservableObject {
         }
         saveFavorites()
     }
-    
+
     func addFavorite(_ athlete: Athlete) {
         guard !favorites.contains(athlete.fisCode) else { return }
         favorites.insert(athlete.fisCode)
         favoriteAthletes.append(athlete)
         saveFavorites()
     }
-    
+
     func removeFavorite(_ athlete: Athlete) {
         favorites.remove(athlete.fisCode)
         favoriteAthletes.removeAll { $0.fisCode == athlete.fisCode }
         saveFavorites()
     }
-    
+
     // MARK: - Persistence
-    
+
     private func loadFavorites() {
+        // Load FIS codes
         if let savedCodes = UserDefaults.standard.stringArray(forKey: favoritesKey) {
             favorites = Set(savedCodes)
-            print("[FavoritesManager] Loaded \(favorites.count) favorites")
+        }
+
+        // Load athlete data
+        if let data = UserDefaults.standard.data(forKey: athletesDataKey) {
+            do {
+                let athletes = try JSONDecoder().decode([Athlete].self, from: data)
+                favoriteAthletes = athletes
+                print("[FavoritesManager] Loaded \(favorites.count) favorites with athlete data")
+            } catch {
+                print("[FavoritesManager] Failed to decode athletes: \(error)")
+            }
+        } else {
+            print("[FavoritesManager] Loaded \(favorites.count) favorites (no athlete data)")
         }
     }
-    
+
     private func saveFavorites() {
+        // Save FIS codes
         UserDefaults.standard.set(Array(favorites), forKey: favoritesKey)
-        print("[FavoritesManager] Saved \(favorites.count) favorites")
+
+        // Save athlete data
+        do {
+            let data = try JSONEncoder().encode(favoriteAthletes)
+            UserDefaults.standard.set(data, forKey: athletesDataKey)
+            print("[FavoritesManager] Saved \(favorites.count) favorites with athlete data")
+        } catch {
+            print("[FavoritesManager] Failed to encode athletes: \(error)")
+        }
     }
-    
+
     // MARK: - Load Athlete Details
-    
+
     func loadFavoriteDetails() async {
         print("[FavoritesManager] Loading details for \(favorites.count) favorites")
-        
+
         var athletes: [Athlete] = []
         let service = FISNetworkService.shared
-        
+
         for fisCode in favorites {
             do {
                 let athlete = try await service.fetchAthlete(competitorID: fisCode)
@@ -375,8 +398,9 @@ class FavoritesManager: ObservableObject {
                 print("[FavoritesManager] Failed to load athlete \(fisCode): \(error)")
             }
         }
-        
+
         favoriteAthletes = athletes
+        saveFavorites()  // Persist the loaded athlete data
         print("[FavoritesManager] Loaded \(athletes.count) athlete details")
     }
 }
