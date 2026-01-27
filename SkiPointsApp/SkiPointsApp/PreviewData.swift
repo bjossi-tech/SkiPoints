@@ -195,7 +195,7 @@ struct PreviewData {
             codex: "0002",
             location: "Adelboden",
             nation: "SUI",
-            date: Calendar.current.date(byAdding: .hour, value: 3, to: Date())!,
+            date: Calendar.current.date(byAdding: .hour, value: 3, to: Date()) ?? Date(),
             eventType: .worldCup,
             discipline: .slalom,
             gender: .men,
@@ -209,7 +209,7 @@ struct PreviewData {
             codex: "0003",
             location: "Sestriere",
             nation: "ITA",
-            date: Calendar.current.date(byAdding: .hour, value: -4, to: Date())!,
+            date: Calendar.current.date(byAdding: .hour, value: -4, to: Date()) ?? Date(),
             eventType: .europaCup,
             discipline: .giantSlalom,
             gender: .women,
@@ -254,7 +254,7 @@ struct PreviewData {
             codex: "0010",
             location: "Wengen",
             nation: "SUI",
-            date: Calendar.current.date(byAdding: .day, value: 1, to: Date())!,
+            date: Calendar.current.date(byAdding: .day, value: 1, to: Date()) ?? Date(),
             eventType: .worldCup,
             discipline: .superG,
             gender: .men,
@@ -266,15 +266,26 @@ struct PreviewData {
     // MARK: - Convenience Getters
 
     static var sampleRace: Race {
-        races[0]
+        races.first ?? Race(
+            id: "0", codex: "0000", location: "Unknown", nation: "---",
+            date: Date(), eventType: .fis, discipline: .giantSlalom,
+            gender: .men, status: .scheduled, results: []
+        )
     }
 
     static var sampleAthlete: Athlete {
-        athletes[0]
+        athletes.first ?? Athlete(
+            fisCode: "0", firstName: "Unknown", lastName: "Athlete",
+            nation: "---", yearOfBirth: 1990, gender: .men
+        )
     }
 
     static var sampleResult: RaceResult {
-        races[0].results[0]
+        races.first?.results.first ?? RaceResult(
+            raceID: "0", rank: 1, bib: 1, athlete: sampleAthlete,
+            timeSeconds: nil, differenceSeconds: nil, status: .finished,
+            fisPoints: 0, cupPoints: 0
+        )
     }
 
     static var liveRaces: [Race] {

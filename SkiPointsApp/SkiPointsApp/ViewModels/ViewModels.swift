@@ -63,12 +63,6 @@ class RaceListViewModel: ObservableObject {
         } catch {
             print("[RaceListViewModel] Error loading races: \(error)")
             self.error = error
-
-            // Fall back to preview data in DEBUG mode
-            #if DEBUG
-            print("[RaceListViewModel] Using preview data as fallback")
-            races = PreviewData.races
-            #endif
         }
 
         isLoading = false
@@ -187,13 +181,6 @@ class RaceDetailViewModel: ObservableObject {
         } catch {
             print("[RaceDetailViewModel] Error loading results: \(error)")
             self.error = error
-
-            #if DEBUG
-            // Use preview data in debug mode
-            if race.id == PreviewData.races.first?.id {
-                results = PreviewData.races.first?.results ?? []
-            }
-            #endif
         }
 
         isLoading = false

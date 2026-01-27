@@ -1,6 +1,8 @@
 import SwiftUI
 
 struct SettingsView: View {
+    private static let fisURL = URL(string: "https://www.fis-ski.com")
+
     var body: some View {
         List {
             Section("About") {
@@ -10,13 +12,15 @@ struct SettingsView: View {
                     Text("1.0.0")
                         .foregroundStyle(.secondary)
                 }
-                
-                Link(destination: URL(string: "https://www.fis-ski.com")!) {
-                    HStack {
-                        Label("FIS Website", systemImage: "globe")
-                        Spacer()
-                        Image(systemName: "arrow.up.right.square")
-                            .foregroundStyle(.secondary)
+
+                if let url = Self.fisURL {
+                    Link(destination: url) {
+                        HStack {
+                            Label("FIS Website", systemImage: "globe")
+                            Spacer()
+                            Image(systemName: "arrow.up.right.square")
+                                .foregroundStyle(.secondary)
+                        }
                     }
                 }
             }
