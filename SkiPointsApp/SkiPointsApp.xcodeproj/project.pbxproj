@@ -21,6 +21,9 @@
 		A100001C001 /* ViewModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100001C000 /* ViewModels.swift */; };
 		A100001F001 /* ErrorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100001F000 /* ErrorView.swift */; };
 		A1000020001 /* LoadingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000020000 /* LoadingView.swift */; };
+		A1000021001 /* AppConstants.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000021000 /* AppConstants.swift */; };
+		A1000022001 /* AppLogger.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000022000 /* AppLogger.swift */; };
+		A1000023001 /* NetworkCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000023000 /* NetworkCache.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -39,6 +42,9 @@
 		A100001C000 /* ViewModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ViewModels.swift; sourceTree = "<group>"; };
 		A100001F000 /* ErrorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ErrorView.swift; sourceTree = "<group>"; };
 		A1000020000 /* LoadingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoadingView.swift; sourceTree = "<group>"; };
+		A1000021000 /* AppConstants.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppConstants.swift; sourceTree = "<group>"; };
+		A1000022000 /* AppLogger.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppLogger.swift; sourceTree = "<group>"; };
+		A1000023000 /* NetworkCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkCache.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -64,6 +70,8 @@
 			isa = PBXGroup;
 			children = (
 				A1000001000 /* SkiPointsApp.swift */,
+				A1000021000 /* AppConstants.swift */,
+				A1000022000 /* AppLogger.swift */,
 				A1000002000 /* ContentView.swift */,
 				A1000003000 /* Models.swift */,
 				A1000004000 /* PreviewData.swift */,
@@ -93,6 +101,7 @@
 			children = (
 				A100001A000 /* FISNetworkService.swift */,
 				A100001B000 /* FISHTMLParser.swift */,
+				A1000023000 /* NetworkCache.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -187,6 +196,9 @@
 				A100001A001 /* FISNetworkService.swift in Sources */,
 				A100001B001 /* FISHTMLParser.swift in Sources */,
 				A100001C001 /* ViewModels.swift in Sources */,
+				A1000021001 /* AppConstants.swift in Sources */,
+				A1000022001 /* AppLogger.swift in Sources */,
+				A1000023001 /* NetworkCache.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
