@@ -273,19 +273,20 @@ struct RaceDetailView: View {
     // MARK: - Results Section
     
     private var resultsSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        let lastResultID = viewModel.race.results.last?.id
+        return VStack(alignment: .leading, spacing: 12) {
             HStack {
                 Text("Results")
                     .font(.headline)
-                
+
                 Spacer()
-                
+
                 if viewModel.isLoading {
                     ProgressView()
                         .scaleEffect(0.7)
                 }
             }
-            
+
             ForEach(viewModel.results) { result in
                 ResultRowView(
                     result: result,
@@ -295,7 +296,7 @@ struct RaceDetailView: View {
                     }
                 )
 
-                if result.id != viewModel.results.last?.id {
+                if result.id != lastResultID {
                     Divider()
                 }
             }
@@ -342,11 +343,6 @@ struct ResultRowView: View {
                     }
                 }
                 
-                if let brand = result.athlete.skiBrand {
-                    Text(brand)
-                        .font(.caption)
-                        .foregroundStyle(.tertiary)
-                }
             }
             
             Spacer()

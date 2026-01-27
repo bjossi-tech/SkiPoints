@@ -46,8 +46,10 @@ actor FISNetworkService {
         let config = URLSessionConfiguration.default
         config.timeoutIntervalForRequest = AppConstants.Network.requestTimeoutSeconds
         // CRITICAL: Use a proper browser User-Agent - FIS blocks non-browser requests
+        let osVersion = ProcessInfo.processInfo.operatingSystemVersion
+        let osVersionString = "\(osVersion.majorVersion)_\(osVersion.minorVersion)"
         config.httpAdditionalHeaders = [
-            "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1",
+            "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS \(osVersionString) like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/\(osVersion.majorVersion).0 Mobile/15E148 Safari/604.1",
             "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
             "Accept-Language": "en-US,en;q=0.9",
             "Accept-Encoding": "gzip, deflate, br"
@@ -72,16 +74,12 @@ actor FISNetworkService {
     
     /// Fetch today's events from the FIS calendar
     func fetchTodaysRaces() async throws -> [Race] {
-        // Get current season code (FIS season runs July to June)
         let calendar = Calendar.current
         let now = Date()
-        let month = calendar.component(.month, from: now)
-        let year = calendar.component(.year, from: now)
-        let seasonCode = month >= 7 ? year + 1 : year
-        
+
         // FIS calendar URL - this returns the full calendar, filtered by season
         // The calendar is client-side rendered, so we need to parse the static content
-        let urlString = "\(baseURL)/DB/alpine-skiing/calendar-results.html?sectorcode=AL&seasoncode=\(seasonCode)"
+        let urlString = "\(baseURL)/DB/alpine-skiing/calendar-results.html?sectorcode=AL&seasoncode=\(seasonCode())"
         
         guard let url = URL(string: urlString) else {
             throw FISNetworkError.invalidURL
@@ -114,11 +112,8 @@ actor FISNetworkService {
     /// Fetch events for a specific date range
     func fetchEvents(from startDate: Date, to endDate: Date) async throws -> [Race] {
         let calendar = Calendar.current
-        let month = calendar.component(.month, from: startDate)
-        let year = calendar.component(.year, from: startDate)
-        let seasonCode = month >= 7 ? year + 1 : year
-        
-        let urlString = "\(baseURL)/DB/alpine-skiing/calendar-results.html?sectorcode=AL&seasoncode=\(seasonCode)"
+
+        let urlString = "\(baseURL)/DB/alpine-skiing/calendar-results.html?sectorcode=AL&seasoncode=\(seasonCode(for: startDate))"
         
         guard let url = URL(string: urlString) else {
             throw FISNetworkError.invalidURL
@@ -146,7 +141,7 @@ actor FISNetworkService {
     func fetchEventDetails(eventID: String, seasonCode: Int? = nil) async throws -> [Race] {
         await waitForRateLimit()
         
-        let season = seasonCode ?? getCurrentSeasonCode()
+        let season = seasonCode ?? self.seasonCode()
         let urlString = "\(baseURL)/DB/general/event-details.html?sectorcode=AL&eventid=\(eventID)&seasoncode=\(season)"
         
         guard let url = URL(string: urlString) else {
@@ -235,11 +230,11 @@ actor FISNetworkService {
     
     // MARK: - Private Helpers
     
-    private func getCurrentSeasonCode() -> Int {
+    /// FIS season runs July to June; a date in July+ belongs to the next year's season.
+    private func seasonCode(for date: Date = Date()) -> Int {
         let calendar = Calendar.current
-        let now = Date()
-        let month = calendar.component(.month, from: now)
-        let year = calendar.component(.year, from: now)
+        let month = calendar.component(.month, from: date)
+        let year = calendar.component(.year, from: date)
         return month >= 7 ? year + 1 : year
     }
     

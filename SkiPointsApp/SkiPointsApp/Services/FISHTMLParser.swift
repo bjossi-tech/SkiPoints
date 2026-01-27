@@ -34,13 +34,11 @@ struct FISHTMLParser {
         var seenEventIDs = Set<String>()
         
         for match in matches {
-            guard let eventIDRange = Range(match.range(at: 1), in: html),
-                  let seasonRange = Range(match.range(at: 2), in: html) else {
+            guard let eventIDRange = Range(match.range(at: 1), in: html) else {
                 continue
             }
-            
+
             let eventID = String(html[eventIDRange])
-            _ = String(html[seasonRange]) // seasonCode extracted but not currently used
             
             // Skip duplicates (same event appears multiple times)
             if seenEventIDs.contains(eventID) {

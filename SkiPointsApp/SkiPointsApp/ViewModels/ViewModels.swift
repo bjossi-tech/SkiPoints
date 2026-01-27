@@ -293,11 +293,13 @@ class RaceDetailViewModel: ObservableObject {
             results = try await service.fetchRaceResults(raceID: raceID)
             selectedRaceID = raceID
             race = eventRace
-            race.results = results
             lastUpdated = Date()
 
+            // Recalculate FIS points with penalty (also syncs race.results)
             if let winnerTime = results.first(where: { $0.status == .finished })?.timeSeconds {
                 calculateAllFISPoints(winnerTime: winnerTime)
+            } else {
+                race.results = results
             }
         } catch {
             Log.viewModel.debug("[RaceDetailViewModel] Error loading results for race \(raceID): \(error)")
@@ -315,26 +317,32 @@ class RaceDetailViewModel: ObservableObject {
     
     private func calculateAllFISPoints(winnerTime: TimeInterval) {
         let penalty = calculateRacePenalty()
-        
+
         Log.viewModel.debug("[RaceDetailViewModel] Calculated penalty: \(penalty)")
-        
-        for i in 0..<results.count {
-            guard results[i].status == .finished,
-                  let athleteTime = results[i].timeSeconds else {
-                continue
+
+        // Build a new array to trigger a single @Published update
+        results = results.map { result in
+            guard result.status == .finished,
+                  let athleteTime = result.timeSeconds else {
+                return result
             }
-            
+
             let racePoints = FISPointsCalculator.calculateRacePoints(
                 athleteTime: athleteTime,
                 winnerTime: winnerTime,
                 discipline: race.discipline
             )
-            
-            results[i].fisPoints = FISPointsCalculator.calculateFISPoints(
+
+            var updated = result
+            updated.fisPoints = FISPointsCalculator.calculateFISPoints(
                 racePoints: racePoints,
                 penalty: penalty
             )
+            return updated
         }
+
+        // Keep race.results in sync after recalculation
+        race.results = results
     }
     
     private func calculateRacePenalty() -> Double {
