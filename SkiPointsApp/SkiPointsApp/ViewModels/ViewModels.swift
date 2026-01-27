@@ -1,6 +1,6 @@
 import Foundation
 import SwiftUI
-import os
+import os.log
 
 // MARK: - Race List View Model
 
@@ -15,29 +15,25 @@ class RaceListViewModel: ObservableObject {
     private var autoRefreshTask: Task<Void, Never>?
 
     init() {
-        AppLogger.viewModel.debug("RaceListViewModel initialized")
+        Log.viewModel.debug("[RaceListViewModel] Initialized")
     }
-
-    deinit {
-        autoRefreshTask?.cancel()
-    }
-
+    
     // MARK: - Load Races
-
+    
     func loadRaces() async {
         guard !isLoading else {
-            AppLogger.viewModel.debug("RaceListViewModel: Already loading, skipping")
+            Log.viewModel.debug("[RaceListViewModel] Already loading, skipping")
             return
         }
-
+        
         isLoading = true
         error = nil
 
-        AppLogger.viewModel.info("Loading races for date: \(self.selectedDate.description)")
-
+        Log.viewModel.debug("[RaceListViewModel] Loading races for date: \(selectedDate)")
+        
         do {
             let service = FISNetworkService.shared
-
+            
             // Check if loading for today
             let calendar = Calendar.current
             if calendar.isDateInToday(selectedDate) {
@@ -45,16 +41,16 @@ class RaceListViewModel: ObservableObject {
             } else {
                 races = try await service.fetchEvents(from: selectedDate, to: selectedDate)
             }
-
+            
             lastUpdated = Date()
-
-            AppLogger.viewModel.info("Loaded \(self.races.count) races")
-
+            
+            Log.viewModel.debug("[RaceListViewModel] Loaded \(races.count) races")
+            
             // Log race details for debugging
             for race in races {
-                AppLogger.viewModel.debug("  - \(race.location): \(race.discipline.displayName) (\(race.status.displayText))")
+                Log.viewModel.debug("  - \(race.location): \(race.discipline.displayName) (\(race.status.displayText))")
             }
-
+            
             // Sort by priority: Live first, then by event type, then by time
             races.sort { first, second in
                 if first.isLive && !second.isLive { return true }
@@ -64,10 +60,16 @@ class RaceListViewModel: ObservableObject {
                 }
                 return first.date < second.date
             }
-
+            
         } catch {
-            AppLogger.viewModel.error("Error loading races: \(error.localizedDescription)")
+            Log.viewModel.debug("[RaceListViewModel] Error loading races: \(error)")
             self.error = error
+
+            // Fall back to preview data in DEBUG mode
+            #if DEBUG
+            Log.viewModel.debug("[RaceListViewModel] Using preview data as fallback")
+            races = PreviewData.races
+            #endif
         }
 
         isLoading = false
@@ -95,24 +97,24 @@ class RaceListViewModel: ObservableObject {
             await loadRaces()
         }
     }
-
+    
     // MARK: - Auto Refresh
 
-    func startAutoRefresh(interval: TimeInterval = AppConstants.Timing.raceListAutoRefreshInterval) {
+    func startAutoRefresh(interval: TimeInterval = AppConstants.RefreshInterval.raceListSeconds) {
         stopAutoRefresh()
 
-        AppLogger.viewModel.info("Starting auto-refresh every \(interval) seconds")
+        Log.viewModel.debug("[RaceListViewModel] Starting auto-refresh every \(interval) seconds")
 
-        autoRefreshTask = Task { [weak self] in
+        autoRefreshTask = Task {
             while !Task.isCancelled {
                 try? await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
 
-                guard !Task.isCancelled, let self else { break }
+                guard !Task.isCancelled else { break }
 
                 // Only auto-refresh if there are live races
-                let hasLiveRaces = self.races.contains { $0.isLive }
+                let hasLiveRaces = races.contains { $0.isLive }
                 if hasLiveRaces {
-                    await self.loadRaces()
+                    await loadRaces()
                 }
             }
         }
@@ -122,17 +124,17 @@ class RaceListViewModel: ObservableObject {
         autoRefreshTask?.cancel()
         autoRefreshTask = nil
     }
-
+    
     // MARK: - Filtering
-
+    
     var liveRaces: [Race] {
         races.filter { $0.isLive }
     }
-
+    
     var upcomingRaces: [Race] {
         races.filter { $0.status == .scheduled }
     }
-
+    
     var completedRaces: [Race] {
         races.filter { $0.isFinished }
     }
@@ -144,21 +146,20 @@ class RaceListViewModel: ObservableObject {
 class RaceDetailViewModel: ObservableObject {
     @Published var race: Race
     @Published var results: [RaceResult] = []
+    @Published var eventRaces: [Race] = []  // Sub-races within this event
+    @Published var selectedRaceID: String?  // Currently selected race for results
     @Published var isLoading = false
     @Published var error: Error?
     @Published var lastUpdated: Date?
     @Published private(set) var isAutoRefreshing = false
+    @Published var resultsUnavailable = false  // True when results can't be loaded
 
     private var autoRefreshTask: Task<Void, Never>?
 
     init(race: Race) {
         self.race = race
         self.results = race.results
-        AppLogger.viewModel.debug("RaceDetailViewModel initialized for race: \(race.id)")
-    }
-
-    deinit {
-        autoRefreshTask?.cancel()
+        Log.viewModel.debug("[RaceDetailViewModel] Initialized for event: \(race.id)")
     }
 
     // MARK: - Load Results
@@ -168,64 +169,179 @@ class RaceDetailViewModel: ObservableObject {
 
         isLoading = true
         error = nil
+        resultsUnavailable = false
 
-        AppLogger.viewModel.info("Loading results for race: \(self.race.id)")
+        Log.viewModel.debug("[RaceDetailViewModel] Loading results for event: \(race.id)")
 
+        let service = FISNetworkService.shared
+
+        // Step 1: Try to fetch event details to get actual race IDs
         do {
-            let service = FISNetworkService.shared
+            let races = try await service.fetchEventDetails(eventID: race.id)
+
+            if !races.isEmpty {
+                eventRaces = races
+                Log.viewModel.debug("[RaceDetailViewModel] Found \(races.count) races in event")
+
+                // Update location from event details if we have it
+                if let firstRace = races.first, race.location == "Unknown Location" {
+                    race = Race(
+                        id: race.id,
+                        codex: race.codex,
+                        location: firstRace.location != "Unknown" ? firstRace.location : race.location,
+                        nation: firstRace.nation != "---" ? firstRace.nation : race.nation,
+                        date: race.date,
+                        eventType: race.eventType,
+                        discipline: firstRace.discipline,
+                        gender: firstRace.gender,
+                        status: race.status,
+                        results: []
+                    )
+                }
+
+                // Step 2: Try to fetch results for the first race with results
+                for eventRace in races {
+                    do {
+                        let raceResults = try await service.fetchRaceResults(raceID: eventRace.id)
+                        if !raceResults.isEmpty {
+                            results = raceResults
+                            selectedRaceID = eventRace.id
+                            lastUpdated = Date()
+
+                            // Update the displayed race info
+                            race = eventRace
+                            race.results = results
+
+                            Log.viewModel.debug("[RaceDetailViewModel] Loaded \(results.count) results for race \(eventRace.id)")
+
+                            // Recalculate FIS points
+                            if let winnerTime = results.first(where: { $0.status == .finished })?.timeSeconds {
+                                calculateAllFISPoints(winnerTime: winnerTime)
+                            }
+
+                            isLoading = false
+                            return
+                        }
+                    } catch {
+                        Log.viewModel.debug("[RaceDetailViewModel] Could not load results for race \(eventRace.id): \(error)")
+                        // Continue to next race
+                    }
+                }
+
+                // No results found for any race in the event
+                Log.viewModel.debug("[RaceDetailViewModel] No results available for any race in this event")
+                resultsUnavailable = true
+                lastUpdated = Date()
+                isLoading = false
+                return
+            }
+        } catch {
+            Log.viewModel.debug("[RaceDetailViewModel] Could not fetch event details: \(error)")
+            // Fall through to try direct results fetch
+        }
+
+        // Step 3: Fallback - try direct results fetch with the ID we have
+        do {
             results = try await service.fetchRaceResults(raceID: race.id)
 
-            lastUpdated = Date()
+            if !results.isEmpty {
+                lastUpdated = Date()
+                Log.viewModel.debug("[RaceDetailViewModel] Loaded \(results.count) results (direct fetch)")
 
-            AppLogger.viewModel.info("Loaded \(self.results.count) results")
+                race.results = results
 
-            // Update race with results
-            race.results = results
+                if let winnerTime = results.first(where: { $0.status == .finished })?.timeSeconds {
+                    calculateAllFISPoints(winnerTime: winnerTime)
+                }
+            } else {
+                resultsUnavailable = true
+            }
+        } catch {
+            Log.viewModel.debug("[RaceDetailViewModel] Error loading results: \(error)")
 
-            // Recalculate FIS points with penalty
-            if let winnerTime = results.first(where: { $0.status == .finished })?.timeSeconds {
-                calculateAllFISPoints(winnerTime: winnerTime)
+            // Check if it's a 404 error - results not available yet
+            if case FISNetworkError.httpError(404) = error {
+                resultsUnavailable = true
+            } else {
+                self.error = error
             }
 
-        } catch {
-            AppLogger.viewModel.error("Error loading results: \(error.localizedDescription)")
-            self.error = error
+            #if DEBUG
+            // Use preview data in debug mode for matching IDs
+            if race.id == PreviewData.races.first?.id {
+                results = PreviewData.races.first?.results ?? []
+                resultsUnavailable = false
+            }
+            #endif
         }
 
         isLoading = false
     }
 
-    // MARK: - FIS Points Calculation
+    /// Load results for a specific race within the event
+    func loadResultsForRace(_ raceID: String) async {
+        guard let eventRace = eventRaces.first(where: { $0.id == raceID }) else { return }
 
+        isLoading = true
+        error = nil
+        resultsUnavailable = false
+
+        Log.viewModel.debug("[RaceDetailViewModel] Loading results for race: \(raceID)")
+
+        do {
+            let service = FISNetworkService.shared
+            results = try await service.fetchRaceResults(raceID: raceID)
+            selectedRaceID = raceID
+            race = eventRace
+            race.results = results
+            lastUpdated = Date()
+
+            if let winnerTime = results.first(where: { $0.status == .finished })?.timeSeconds {
+                calculateAllFISPoints(winnerTime: winnerTime)
+            }
+        } catch {
+            Log.viewModel.debug("[RaceDetailViewModel] Error loading results for race \(raceID): \(error)")
+            if case FISNetworkError.httpError(404) = error {
+                resultsUnavailable = true
+            } else {
+                self.error = error
+            }
+        }
+
+        isLoading = false
+    }
+    
+    // MARK: - FIS Points Calculation
+    
     private func calculateAllFISPoints(winnerTime: TimeInterval) {
         let penalty = calculateRacePenalty()
-
-        AppLogger.viewModel.debug("Calculated penalty: \(penalty)")
-
+        
+        Log.viewModel.debug("[RaceDetailViewModel] Calculated penalty: \(penalty)")
+        
         for i in 0..<results.count {
             guard results[i].status == .finished,
                   let athleteTime = results[i].timeSeconds else {
                 continue
             }
-
+            
             let racePoints = FISPointsCalculator.calculateRacePoints(
                 athleteTime: athleteTime,
                 winnerTime: winnerTime,
                 discipline: race.discipline
             )
-
+            
             results[i].fisPoints = FISPointsCalculator.calculateFISPoints(
                 racePoints: racePoints,
                 penalty: penalty
             )
         }
     }
-
+    
     private func calculateRacePenalty() -> Double {
         // Get FIS points of all starters
         let startersFISPoints = results
             .map { $0.athlete.points(for: race.discipline) }
-
+        
         // Get race points of top 10
         let top10RacePoints = results
             .filter { $0.status == .finished }
@@ -241,13 +357,13 @@ class RaceDetailViewModel: ObservableObject {
                     discipline: race.discipline
                 )
             }
-
+        
         return FISPointsCalculator.calculatePenalty(
             startersFISPoints: startersFISPoints,
             top10RacePoints: Array(top10RacePoints)
         )
     }
-
+    
     // MARK: - Auto Refresh
 
     func startAutoRefresh() {
@@ -255,16 +371,16 @@ class RaceDetailViewModel: ObservableObject {
 
         stopAutoRefresh()
 
-        AppLogger.viewModel.info("Starting auto-refresh for live race")
+        Log.viewModel.debug("[RaceDetailViewModel] Starting auto-refresh for live race")
         isAutoRefreshing = true
 
-        autoRefreshTask = Task { [weak self] in
+        autoRefreshTask = Task {
             while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: UInt64(AppConstants.Timing.raceDetailAutoRefreshInterval * 1_000_000_000))
+                try? await Task.sleep(nanoseconds: UInt64(AppConstants.RefreshInterval.liveRaceSeconds * 1_000_000_000))
 
-                guard !Task.isCancelled, let self else { break }
+                guard !Task.isCancelled else { break }
 
-                await self.loadResults()
+                await loadResults()
             }
         }
     }
@@ -274,25 +390,25 @@ class RaceDetailViewModel: ObservableObject {
         autoRefreshTask = nil
         isAutoRefreshing = false
     }
-
+    
     // MARK: - Result Categories
-
+    
     var podiumResults: [RaceResult] {
         results.filter { $0.status == .finished && $0.rank <= 3 }
     }
-
+    
     var finishedResults: [RaceResult] {
         results.filter { $0.status == .finished }
     }
-
+    
     var dnfResults: [RaceResult] {
         results.filter { $0.status == .didNotFinish }
     }
-
+    
     var dnsResults: [RaceResult] {
         results.filter { $0.status == .didNotStart }
     }
-
+    
     var dsqResults: [RaceResult] {
         results.filter { $0.status == .disqualified }
     }
@@ -305,8 +421,8 @@ class FavoritesManager: ObservableObject {
     @Published private(set) var favorites: Set<String> = []
     @Published private(set) var favoriteAthletes: [Athlete] = []
 
-    private let favoritesKey = "favoriteAthletes"
-    private let athletesDataKey = "favoriteAthletesData"
+    private let favoritesKey = AppConstants.UserDefaultsKeys.favoriteAthletes
+    private let athletesDataKey = AppConstants.UserDefaultsKeys.favoriteAthletesData
 
     init() {
         loadFavorites()
@@ -355,12 +471,12 @@ class FavoritesManager: ObservableObject {
             do {
                 let athletes = try JSONDecoder().decode([Athlete].self, from: data)
                 favoriteAthletes = athletes
-                AppLogger.favorites.info("Loaded \(self.favorites.count) favorites with athlete data")
+                Log.favorites.debug("[FavoritesManager] Loaded \(favorites.count) favorites with athlete data")
             } catch {
-                AppLogger.favorites.error("Failed to decode athletes: \(error.localizedDescription)")
+                Log.favorites.debug("[FavoritesManager] Failed to decode athletes: \(error)")
             }
         } else {
-            AppLogger.favorites.info("Loaded \(self.favorites.count) favorites (no athlete data)")
+            Log.favorites.debug("[FavoritesManager] Loaded \(favorites.count) favorites (no athlete data)")
         }
     }
 
@@ -372,16 +488,16 @@ class FavoritesManager: ObservableObject {
         do {
             let data = try JSONEncoder().encode(favoriteAthletes)
             UserDefaults.standard.set(data, forKey: athletesDataKey)
-            AppLogger.favorites.info("Saved \(self.favorites.count) favorites with athlete data")
+            Log.favorites.debug("[FavoritesManager] Saved \(favorites.count) favorites with athlete data")
         } catch {
-            AppLogger.favorites.error("Failed to encode athletes: \(error.localizedDescription)")
+            Log.favorites.debug("[FavoritesManager] Failed to encode athletes: \(error)")
         }
     }
 
     // MARK: - Load Athlete Details
 
     func loadFavoriteDetails() async {
-        AppLogger.favorites.info("Loading details for \(self.favorites.count) favorites")
+        Log.favorites.debug("[FavoritesManager] Loading details for \(favorites.count) favorites")
 
         var athletes: [Athlete] = []
         let service = FISNetworkService.shared
@@ -391,13 +507,13 @@ class FavoritesManager: ObservableObject {
                 let athlete = try await service.fetchAthlete(competitorID: fisCode)
                 athletes.append(athlete)
             } catch {
-                AppLogger.favorites.error("Failed to load athlete \(fisCode): \(error.localizedDescription)")
+                Log.favorites.debug("[FavoritesManager] Failed to load athlete \(fisCode): \(error)")
             }
         }
 
         favoriteAthletes = athletes
         saveFavorites()  // Persist the loaded athlete data
-        AppLogger.favorites.info("Loaded \(athletes.count) athlete details")
+        Log.favorites.debug("[FavoritesManager] Loaded \(athletes.count) athlete details")
     }
 }
 
@@ -412,10 +528,6 @@ class AthleteSearchViewModel: ObservableObject {
 
     private var searchTask: Task<Void, Never>?
 
-    deinit {
-        searchTask?.cancel()
-    }
-
     func search() async {
         guard searchQuery.count >= AppConstants.Search.minimumQueryLength else {
             searchResults = []
@@ -427,39 +539,38 @@ class AthleteSearchViewModel: ObservableObject {
         isSearching = true
         error = nil
 
-        AppLogger.viewModel.info("Searching for: \(self.searchQuery)")
+        Log.search.debug("[AthleteSearchViewModel] Searching for: \(searchQuery)")
 
-        searchTask = Task { [weak self] in
+        searchTask = Task {
             do {
                 // Debounce
-                try await Task.sleep(nanoseconds: AppConstants.Timing.searchDebounceNanoseconds)
-
-                guard !Task.isCancelled, let self else { return }
-
-                let service = FISNetworkService.shared
-                let results = try await service.searchAthletes(query: self.searchQuery)
+                try await Task.sleep(nanoseconds: AppConstants.RefreshInterval.searchDebounceNanoseconds)
 
                 guard !Task.isCancelled else { return }
 
-                self.searchResults = results
-                AppLogger.viewModel.info("Found \(results.count) athletes")
+                let service = FISNetworkService.shared
+                let results = try await service.searchAthletes(query: searchQuery)
+
+                guard !Task.isCancelled else { return }
+
+                searchResults = results
+                Log.search.debug("[AthleteSearchViewModel] Found \(results.count) athletes")
 
             } catch {
-                if !Task.isCancelled, let self {
-                    AppLogger.viewModel.error("Search error: \(error.localizedDescription)")
+                if !Task.isCancelled {
+                    Log.search.debug("[AthleteSearchViewModel] Search error: \(error)")
                     self.error = error
                 }
             }
 
-            if let self {
-                self.isSearching = false
-            }
+            isSearching = false
         }
     }
-
+    
     func clearSearch() {
         searchQuery = ""
         searchResults = []
         searchTask?.cancel()
     }
 }
+
