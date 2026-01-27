@@ -28,7 +28,7 @@ struct Athlete: Identifiable, Codable, Hashable, Sendable {
     
     // Get FIS points for a specific discipline
     func points(for discipline: Discipline) -> Double {
-        fisPoints[discipline] ?? 999.99
+        fisPoints[discipline] ?? AppConstants.FISPoints.defaultPoints
     }
 
     /// Short name format: "M. Odermatt"
@@ -46,7 +46,7 @@ struct Athlete: Identifiable, Codable, Hashable, Sendable {
 
     /// Current best FIS points across all disciplines
     var currentFISPoints: Double? {
-        let validPoints = fisPoints.values.filter { $0 < 990 }
+        let validPoints = fisPoints.values.filter { $0 < AppConstants.FISPoints.validPointsThreshold }
         return validPoints.min()
     }
 
@@ -248,17 +248,16 @@ struct Race: Identifiable, Codable, Hashable, Sendable {
         // Get the 5 athletes with the best FIS points who started
         let bestFISPoints = finishedResults
             .compactMap { $0.athlete.points(for: discipline) }
-            .filter { $0 < 990 }  // Exclude athletes without real FIS points
+            .filter { $0 < AppConstants.FISPoints.validPointsThreshold }
             .sorted()
             .prefix(5)
         
-        guard bestFISPoints.count >= 5 else {
-            // If less than 5 valid, use maximum penalty
-            return 100.0  // Default high penalty
+        guard bestFISPoints.count >= AppConstants.FISPoints.minimumRequiredAthletes else {
+            return AppConstants.FISPoints.defaultPenalty
         }
-        
+
         // Penalty = sum of best 5 FIS points divided by 5, multiplied by factor
-        return bestFISPoints.reduce(0, +) / 5.0 * 0.75
+        return bestFISPoints.reduce(0, +) / AppConstants.FISPoints.averagingDivisor * AppConstants.FISPoints.penaltyMultiplier
     }
 }
 
@@ -565,25 +564,25 @@ struct FISPointsCalculator {
     ) -> Double {
         // Component A: Best 5 FIS points among starters
         let bestFISPoints = startersFISPoints
-            .filter { $0 < 990 }
+            .filter { $0 < AppConstants.FISPoints.validPointsThreshold }
             .sorted()
             .prefix(5)
-        
+
         let componentA: Double
-        if bestFISPoints.count >= 5 {
-            componentA = bestFISPoints.reduce(0, +) / 5.0 * 0.75
+        if bestFISPoints.count >= AppConstants.FISPoints.minimumRequiredAthletes {
+            componentA = bestFISPoints.reduce(0, +) / AppConstants.FISPoints.averagingDivisor * AppConstants.FISPoints.penaltyMultiplier
         } else {
-            componentA = 50.0  // Default if not enough valid FIS points
+            componentA = AppConstants.FISPoints.defaultComponentA
         }
-        
+
         // Component B: Best 5 race points among top 10
         let bestRacePoints = top10RacePoints
             .sorted()
             .prefix(5)
-        
+
         let componentB: Double
-        if bestRacePoints.count >= 5 {
-            componentB = bestRacePoints.reduce(0, +) / 5.0
+        if bestRacePoints.count >= AppConstants.FISPoints.minimumRequiredAthletes {
+            componentB = bestRacePoints.reduce(0, +) / AppConstants.FISPoints.averagingDivisor
         } else {
             componentB = 0.0
         }

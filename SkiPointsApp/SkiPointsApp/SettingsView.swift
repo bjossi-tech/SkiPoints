@@ -9,7 +9,7 @@ struct SettingsView: View {
                 HStack {
                     Label("Version", systemImage: "info.circle")
                     Spacer()
-                    Text("1.0.0")
+                    Text(AppConstants.appVersion)
                         .foregroundStyle(.secondary)
                 }
 
