@@ -1,20 +1,18 @@
 import SwiftUI
 
 struct SettingsView: View {
-    private static let fisURL = URL(string: "https://www.fis-ski.com")
-
     var body: some View {
         List {
             Section("About") {
                 HStack {
                     Label("Version", systemImage: "info.circle")
                     Spacer()
-                    Text(AppConstants.appVersion)
+                    Text(AppConstants.AppInfo.version)
                         .foregroundStyle(.secondary)
                 }
 
-                if let url = Self.fisURL {
-                    Link(destination: url) {
+                if let fisURL = URL(string: AppConstants.AppInfo.fisWebsiteURL) {
+                    Link(destination: fisURL) {
                         HStack {
                             Label("FIS Website", systemImage: "globe")
                             Spacer()
@@ -29,7 +27,7 @@ struct SettingsView: View {
                 HStack {
                     Label("Developer", systemImage: "person")
                     Spacer()
-                    Text("Björn")
+                    Text(AppConstants.AppInfo.developer)
                         .foregroundStyle(.secondary)
                 }
             }

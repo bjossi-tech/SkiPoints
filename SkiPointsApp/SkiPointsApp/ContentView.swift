@@ -15,6 +15,15 @@ struct ContentView: View {
             }
             .tag(0)
 
+            // Search Tab
+            NavigationStack {
+                AthleteSearchView(favoritesManager: favoritesManager)
+            }
+            .tabItem {
+                Label("Search", systemImage: "magnifyingglass")
+            }
+            .tag(1)
+
             // Favorites Tab
             NavigationStack {
                 FavoritesView(favoritesManager: favoritesManager)
@@ -22,7 +31,7 @@ struct ContentView: View {
             .tabItem {
                 Label("Favorites", systemImage: "star.fill")
             }
-            .tag(1)
+            .tag(2)
 
             // Settings Tab
             NavigationStack {
@@ -31,7 +40,7 @@ struct ContentView: View {
             .tabItem {
                 Label("Settings", systemImage: "gear")
             }
-            .tag(2)
+            .tag(3)
         }
     }
 }

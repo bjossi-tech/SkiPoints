@@ -4,6 +4,8 @@ struct RaceListView: View {
     @ObservedObject var favoritesManager: FavoritesManager
     @StateObject private var viewModel = RaceListViewModel()
     @State private var selectedRace: Race?
+    @State private var selectedDiscipline: Discipline?
+    @State private var selectedGender: Gender?
 
     var body: some View {
         Group {
@@ -34,6 +36,123 @@ struct RaceListView: View {
         .refreshable {
             await viewModel.refresh()
         }
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                filterMenu
+            }
+        }
+    }
+
+    // MARK: - Filtered Races
+
+    private var filteredRaces: [Race] {
+        viewModel.races.filter { race in
+            let disciplineMatch = selectedDiscipline == nil || race.discipline == selectedDiscipline
+            let genderMatch = selectedGender == nil || race.gender == selectedGender
+            return disciplineMatch && genderMatch
+        }
+    }
+
+    private var filteredLiveRaces: [Race] {
+        filteredRaces.filter { $0.isLive }
+    }
+
+    private var filteredCompletedRaces: [Race] {
+        filteredRaces.filter { $0.isFinished }
+    }
+
+    private var filteredUpcomingRaces: [Race] {
+        filteredRaces.filter { $0.status == .scheduled }
+    }
+
+    private var hasActiveFilters: Bool {
+        selectedDiscipline != nil || selectedGender != nil
+    }
+
+    private var activeFiltersView: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                if let discipline = selectedDiscipline {
+                    FilterChip(
+                        title: discipline.displayName,
+                        systemImage: discipline.iconName
+                    ) {
+                        selectedDiscipline = nil
+                    }
+                }
+
+                if let gender = selectedGender {
+                    FilterChip(
+                        title: gender.displayName,
+                        systemImage: "person"
+                    ) {
+                        selectedGender = nil
+                    }
+                }
+            }
+        }
+    }
+
+    // MARK: - Filter Menu
+
+    private var filterMenu: some View {
+        Menu {
+            // Discipline filter
+            Menu {
+                Button {
+                    selectedDiscipline = nil
+                } label: {
+                    Label("All Disciplines", systemImage: selectedDiscipline == nil ? "checkmark" : "")
+                }
+
+                Divider()
+
+                ForEach(Discipline.allCases, id: \.self) { discipline in
+                    Button {
+                        selectedDiscipline = discipline
+                    } label: {
+                        Label(discipline.displayName, systemImage: selectedDiscipline == discipline ? "checkmark" : "")
+                    }
+                }
+            } label: {
+                Label(selectedDiscipline?.displayName ?? "Discipline", systemImage: "figure.skiing.downhill")
+            }
+
+            // Gender filter
+            Menu {
+                Button {
+                    selectedGender = nil
+                } label: {
+                    Label("All", systemImage: selectedGender == nil ? "checkmark" : "")
+                }
+
+                Divider()
+
+                ForEach(Gender.allCases, id: \.self) { gender in
+                    Button {
+                        selectedGender = gender
+                    } label: {
+                        Label(gender.displayName, systemImage: selectedGender == gender ? "checkmark" : "")
+                    }
+                }
+            } label: {
+                Label(selectedGender?.displayName ?? "Gender", systemImage: "person.2")
+            }
+
+            if hasActiveFilters {
+                Divider()
+
+                Button(role: .destructive) {
+                    selectedDiscipline = nil
+                    selectedGender = nil
+                } label: {
+                    Label("Clear Filters", systemImage: "xmark.circle")
+                }
+            }
+        } label: {
+            Image(systemName: hasActiveFilters ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease.circle")
+                .foregroundStyle(hasActiveFilters ? .blue : .primary)
+        }
     }
     
     private var raceList: some View {
@@ -50,14 +169,33 @@ struct RaceListView: View {
                     .padding(.horizontal)
                 }
                 
-                if !viewModel.liveRaces.isEmpty {
-                    raceSection(title: "Live Now", races: viewModel.liveRaces, showPulse: true)
+                // Active filters indicator
+                if hasActiveFilters {
+                    activeFiltersView
                 }
-                if !viewModel.completedRaces.isEmpty {
-                    raceSection(title: "Completed", races: viewModel.completedRaces, showPulse: false)
+
+                if !filteredLiveRaces.isEmpty {
+                    raceSection(title: "Live Now", races: filteredLiveRaces, showPulse: true)
                 }
-                if !viewModel.upcomingRaces.isEmpty {
-                    raceSection(title: "Upcoming", races: viewModel.upcomingRaces, showPulse: false)
+                if !filteredCompletedRaces.isEmpty {
+                    raceSection(title: "Completed", races: filteredCompletedRaces, showPulse: false)
+                }
+                if !filteredUpcomingRaces.isEmpty {
+                    raceSection(title: "Upcoming", races: filteredUpcomingRaces, showPulse: false)
+                }
+
+                if filteredRaces.isEmpty && !viewModel.races.isEmpty {
+                    ContentUnavailableView {
+                        Label("No Matching Races", systemImage: "magnifyingglass")
+                    } description: {
+                        Text("Try adjusting your filters.")
+                    } actions: {
+                        Button("Clear Filters") {
+                            selectedDiscipline = nil
+                            selectedGender = nil
+                        }
+                    }
+                    .padding(.top, 40)
                 }
             }
             .padding()
@@ -182,6 +320,35 @@ struct StatusBadge: View {
         case .cancelled: return .gray
         case .postponed: return .purple
         }
+    }
+}
+
+// MARK: - Filter Chip
+
+struct FilterChip: View {
+    let title: String
+    let systemImage: String
+    var onRemove: () -> Void
+
+    var body: some View {
+        HStack(spacing: 4) {
+            Image(systemName: systemImage)
+                .font(.caption2)
+            Text(title)
+                .font(.caption)
+                .fontWeight(.medium)
+            Button {
+                onRemove()
+            } label: {
+                Image(systemName: "xmark.circle.fill")
+                    .font(.caption)
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(Capsule().fill(.blue.opacity(0.15)))
+        .foregroundStyle(.blue)
     }
 }
 
