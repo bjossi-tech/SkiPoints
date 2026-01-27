@@ -30,12 +30,13 @@ enum AppConstants {
     // MARK: - FIS Points Calculation
 
     enum FISPoints {
-        static let invalidPointsThreshold: Double = 990.0
-        static let maxValidPoints: Double = 999.99
-        static let defaultHighPenalty: Double = 100.0
-        static let defaultPenaltyComponent: Double = 50.0
+        static let validPointsThreshold: Double = 990.0
+        static let defaultPoints: Double = 990.0
+        static let defaultPenalty: Double = 100.0
+        static let defaultComponentA: Double = 50.0
         static let penaltyMultiplier: Double = 0.75
-        static let minimumStartersForPenalty = 5
+        static let minimumRequiredAthletes = 5
+        static let averagingDivisor: Double = 5.0
     }
 
     // MARK: - UserDefaults Keys
