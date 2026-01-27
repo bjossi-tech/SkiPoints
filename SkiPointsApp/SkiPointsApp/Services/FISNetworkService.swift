@@ -95,8 +95,10 @@ actor FISNetworkService {
         
         // Filter to today's events
         let today = calendar.startOfDay(for: now)
-        let tomorrow = calendar.date(byAdding: .day, value: 1, to: today)!
-        
+        guard let tomorrow = calendar.date(byAdding: .day, value: 1, to: today) else {
+            throw FISNetworkError.parsingError("Failed to calculate tomorrow's date")
+        }
+
         let todaysEvents = allEvents.filter { event in
             event.date >= today && event.date < tomorrow
         }
@@ -124,8 +126,10 @@ actor FISNetworkService {
         
         // Filter to date range
         let startOfStartDate = calendar.startOfDay(for: startDate)
-        let endOfEndDate = calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: endDate))!
-        
+        guard let endOfEndDate = calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: endDate)) else {
+            throw FISNetworkError.parsingError("Failed to calculate end date range")
+        }
+
         return allEvents.filter { event in
             event.date >= startOfStartDate && event.date < endOfEndDate
         }

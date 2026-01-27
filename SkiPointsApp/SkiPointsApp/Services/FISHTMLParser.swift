@@ -142,7 +142,7 @@ struct FISHTMLParser {
         let racePattern = #"results\.html\?sectorcode=AL&raceid=(\d+)"#
         
         guard let raceRegex = try? NSRegularExpression(pattern: racePattern, options: [.caseInsensitive]) else {
-            return races
+            throw FISNetworkError.parsingError("Failed to create race regex")
         }
         
         let range = NSRange(html.startIndex..., in: html)
@@ -418,7 +418,7 @@ struct FISHTMLParser {
         let competitorPattern = #"competitorid=(\d+)[^>]*>([^<]+)</a>[^<]*<[^>]*>([A-Z]{3})"#
         
         guard let regex = try? NSRegularExpression(pattern: competitorPattern, options: [.caseInsensitive]) else {
-            return athletes
+            throw FISNetworkError.parsingError("Failed to create athlete search regex")
         }
         
         let range = NSRange(html.startIndex..., in: html)
@@ -486,33 +486,32 @@ struct FISHTMLParser {
     
     private static func parseName(_ fullName: String) -> (firstName: String, lastName: String) {
         let components = fullName.components(separatedBy: " ")
-        if components.count >= 2 {
-            // FIS typically uses "LASTNAME Firstname" format
-            let lastName = components[0]
-            let firstName = components.dropFirst().joined(separator: " ")
-            return (firstName, lastName)
+        guard let lastName = components.first, components.count >= 2 else {
+            return (fullName, "")
         }
-        return (fullName, "")
+        // FIS typically uses "LASTNAME Firstname" format
+        let firstName = components.dropFirst().joined(separator: " ")
+        return (firstName, lastName)
     }
     
     private static func parseTime(_ timeStr: String?) -> TimeInterval? {
         guard let timeStr = timeStr else { return nil }
-        
+
         // Format: MM:SS.ss or SS.ss
         let components = timeStr.split(separator: ":")
-        
-        if components.count == 2 {
+
+        if components.count == 2,
+           let minutesPart = components.first,
+           let secondsPart = components.last,
+           let minutes = Double(minutesPart),
+           let seconds = Double(secondsPart) {
             // MM:SS.ss
-            guard let minutes = Double(components[0]),
-                  let seconds = Double(components[1]) else {
-                return nil
-            }
             return minutes * 60 + seconds
         } else if components.count == 1 {
             // SS.ss
             return Double(timeStr)
         }
-        
+
         return nil
     }
     
