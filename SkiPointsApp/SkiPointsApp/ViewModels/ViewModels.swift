@@ -29,7 +29,7 @@ class RaceListViewModel: ObservableObject {
         isLoading = true
         error = nil
 
-        Log.viewModel.debug("[RaceListViewModel] Loading races for date: \(selectedDate)")
+        Log.viewModel.debug("[RaceListViewModel] Loading races for date: \(self.selectedDate)")
         
         do {
             let service = FISNetworkService.shared
@@ -44,7 +44,7 @@ class RaceListViewModel: ObservableObject {
             
             lastUpdated = Date()
             
-            Log.viewModel.debug("[RaceListViewModel] Loaded \(races.count) races")
+            Log.viewModel.debug("[RaceListViewModel] Loaded \(self.races.count) races")
             
             // Log race details for debugging
             for race in races {
@@ -94,7 +94,7 @@ class RaceListViewModel: ObservableObject {
     func selectDate(_ date: Date) {
         selectedDate = date
         Task {
-            await loadRaces()
+            await self.loadRaces()
         }
     }
     
@@ -112,9 +112,9 @@ class RaceListViewModel: ObservableObject {
                 guard !Task.isCancelled else { break }
 
                 // Only auto-refresh if there are live races
-                let hasLiveRaces = races.contains { $0.isLive }
+                let hasLiveRaces = self.races.contains { $0.isLive }
                 if hasLiveRaces {
-                    await loadRaces()
+                    await self.loadRaces()
                 }
             }
         }
@@ -171,7 +171,7 @@ class RaceDetailViewModel: ObservableObject {
         error = nil
         resultsUnavailable = false
 
-        Log.viewModel.debug("[RaceDetailViewModel] Loading results for event: \(race.id)")
+        Log.viewModel.debug("[RaceDetailViewModel] Loading results for event: \(self.race.id)")
 
         let service = FISNetworkService.shared
 
@@ -212,7 +212,7 @@ class RaceDetailViewModel: ObservableObject {
                             race = eventRace
                             race.results = results
 
-                            Log.viewModel.debug("[RaceDetailViewModel] Loaded \(results.count) results for race \(eventRace.id)")
+                            Log.viewModel.debug("[RaceDetailViewModel] Loaded \(self.results.count) results for race \(eventRace.id)")
 
                             // Recalculate FIS points
                             if let winnerTime = results.first(where: { $0.status == .finished })?.timeSeconds {
@@ -246,7 +246,7 @@ class RaceDetailViewModel: ObservableObject {
 
             if !results.isEmpty {
                 lastUpdated = Date()
-                Log.viewModel.debug("[RaceDetailViewModel] Loaded \(results.count) results (direct fetch)")
+                Log.viewModel.debug("[RaceDetailViewModel] Loaded \(self.results.count) results (direct fetch)")
 
                 race.results = results
 
@@ -388,7 +388,7 @@ class RaceDetailViewModel: ObservableObject {
 
                 guard !Task.isCancelled else { break }
 
-                await loadResults()
+                await self.loadResults()
             }
         }
     }
@@ -479,12 +479,12 @@ class FavoritesManager: ObservableObject {
             do {
                 let athletes = try JSONDecoder().decode([Athlete].self, from: data)
                 favoriteAthletes = athletes
-                Log.favorites.debug("[FavoritesManager] Loaded \(favorites.count) favorites with athlete data")
+                Log.favorites.debug("[FavoritesManager] Loaded \(self.favorites.count) favorites with athlete data")
             } catch {
                 Log.favorites.debug("[FavoritesManager] Failed to decode athletes: \(error)")
             }
         } else {
-            Log.favorites.debug("[FavoritesManager] Loaded \(favorites.count) favorites (no athlete data)")
+            Log.favorites.debug("[FavoritesManager] Loaded \(self.favorites.count) favorites (no athlete data)")
         }
     }
 
@@ -496,7 +496,7 @@ class FavoritesManager: ObservableObject {
         do {
             let data = try JSONEncoder().encode(favoriteAthletes)
             UserDefaults.standard.set(data, forKey: athletesDataKey)
-            Log.favorites.debug("[FavoritesManager] Saved \(favorites.count) favorites with athlete data")
+            Log.favorites.debug("[FavoritesManager] Saved \(self.favorites.count) favorites with athlete data")
         } catch {
             Log.favorites.debug("[FavoritesManager] Failed to encode athletes: \(error)")
         }
@@ -505,7 +505,7 @@ class FavoritesManager: ObservableObject {
     // MARK: - Load Athlete Details
 
     func loadFavoriteDetails() async {
-        Log.favorites.debug("[FavoritesManager] Loading details for \(favorites.count) favorites")
+        Log.favorites.debug("[FavoritesManager] Loading details for \(self.favorites.count) favorites")
 
         var athletes: [Athlete] = []
         let service = FISNetworkService.shared
@@ -547,7 +547,7 @@ class AthleteSearchViewModel: ObservableObject {
         isSearching = true
         error = nil
 
-        Log.search.debug("[AthleteSearchViewModel] Searching for: \(searchQuery)")
+        Log.search.debug("[AthleteSearchViewModel] Searching for: \(self.searchQuery)")
 
         searchTask = Task {
             do {
@@ -557,11 +557,11 @@ class AthleteSearchViewModel: ObservableObject {
                 guard !Task.isCancelled else { return }
 
                 let service = FISNetworkService.shared
-                let results = try await service.searchAthletes(query: searchQuery)
+                let results = try await service.searchAthletes(query: self.searchQuery)
 
                 guard !Task.isCancelled else { return }
 
-                searchResults = results
+                self.searchResults = results
                 Log.search.debug("[AthleteSearchViewModel] Found \(results.count) athletes")
 
             } catch {
@@ -571,10 +571,10 @@ class AthleteSearchViewModel: ObservableObject {
                 }
             }
 
-            isSearching = false
+            self.isSearching = false
         }
     }
-    
+
     func clearSearch() {
         searchQuery = ""
         searchResults = []
