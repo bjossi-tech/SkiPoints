@@ -122,7 +122,7 @@ struct PreviewData {
             : Array(athletes.filter { $0.gender == .men }.prefix(5))
         
         var results: [RaceResult] = []
-        var currentTime: TimeInterval = 65.50  // Winner time in seconds
+        let currentTime: TimeInterval = 65.50  // Winner time in seconds
         
         for (index, athlete) in selectedAthletes.enumerated() {
             let rank = index + 1
