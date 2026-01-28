@@ -34,11 +34,6 @@ struct FavoritesView: View {
                                         .fontWeight(.medium)
                                 }
 
-                                if let brand = athlete.skiBrand {
-                                    Text(brand)
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                }
                             }
 
                             Spacer()

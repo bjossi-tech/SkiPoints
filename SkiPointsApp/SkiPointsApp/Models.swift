@@ -50,13 +50,6 @@ struct Athlete: Identifiable, Codable, Hashable, Sendable {
         return validPoints.min()
     }
 
-    /// Ski brand (placeholder - would need to be fetched from athlete bio)
-    var skiBrand: String? {
-        // This would typically be fetched from athlete biography
-        // Returning nil as placeholder
-        nil
-    }
-
     /// Convert nation code to flag emoji
     static func flagEmoji(for nationCode: String) -> String {
         let flagMap: [String: String] = [
